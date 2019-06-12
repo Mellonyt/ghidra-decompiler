@@ -60,7 +60,7 @@ public class SymbolicVSA extends GhidraScript {
             long fentry = f.getEntryPoint().getOffset();
 
             // Entry-point
-            if (fentry != 0x004005a6)
+            if (fentry != 0x0400546)
                 continue;
 
             println("Function Entry: " + f.getEntryPoint());
@@ -69,7 +69,8 @@ public class SymbolicVSA extends GhidraScript {
             smar = new FunctionSMAR(arch, program, listing, f, monitor);
             smar.doRecording();
 
-            Map<String, Set<String>> smart = smar.getMAARTable();
+            Map<Long, Map<String, Set<String>>> smart = smar.getSMARTable();
+            
             println(smart.toString());
         }
     }
@@ -101,10 +102,12 @@ class FunctionSMAR {
     private final Function m_function;
     private TaskMonitor m_monitor;
 
+    private Map<Long, Map<String, Set<String>>> m_SMARTable;   // The function-level memory-access table
+    private Map<Address, BlockSMAR> m_blocks;           // All blocks in this function
+
     private HashMap<String, String> m_registers;        // Track register status
     private HashMap<String, String> m_memories;         // Track memory status
-    private Map<String, Set<String>> m_SMARTable;   // The function-level memory-access table
-    private Map<Address, BlockSMAR> m_blocks;       // All blocks in this function
+
 
     public FunctionSMAR(HardwareArch arch, Program program, Listing listintDB, Function func, TaskMonitor monitor) {
         m_arch = arch;
@@ -113,16 +116,12 @@ class FunctionSMAR {
         m_function = func;
         m_monitor = monitor;
 
-        m_registers = new HashMap<String, String>();        // CPU State : Registers
-        m_memories = new HashMap<String, String>();         // CPU State : Memory slot
-        m_SMARTable = new HashMap<String, Set<String>>();   // Symbolic Store
         m_blocks = new HashMap<Address, BlockSMAR>();       // Basic Blocks of this function
 
-        /* get all registers */
-
+        m_registers = new HashMap<String, String>();        // CPU State : Registers
+        m_memories = new HashMap<String, String>();         // CPU State : Memory slot
 
         InitMachineStatus();
-        InitSMARTable();
         constructCFG();
     }
 
@@ -133,22 +132,8 @@ class FunctionSMAR {
         for (String reg: allRegs) {
             m_registers.put(reg, "V" + reg);
         }
-        /* Doesn't need to initialize memory space */
-    }
 
-    private void InitSMARTable() {
-        if (m_SMARTable == null) {
-            m_SMARTable = new HashMap<String, Set<String>>();
-        }
-
-        /* initialize m_SMART */
-        String[] allRegs = m_arch.getAllRegisters();
-
-        for (String reg: allRegs) {
-            Set<String> vs = new HashSet<String>();
-            vs.add("V" + reg);
-            m_SMARTable.put(reg, vs);
-        }
+        /* Doesn't need to initialize memory state */
     }
 
     private void constructCFG() {
@@ -201,17 +186,26 @@ class FunctionSMAR {
     public boolean doRecording() {
         CodeBlockModel blkModel = new BasicBlockModel(m_program);
         Address addr = m_function.getEntryPoint();
+        CodeBlock firstBlk;
+
+        try {
+            firstBlk = blkModel.getCodeBlockAt(addr, m_monitor);
+        }
+        catch (Exception e) {
+            System.out.println("210: Get first block failed");
+            return false;
+        }
+
+        // Obtain the wrapper object for GHIDRA's basic block
+        BlockSMAR smarBlk = m_blocks.get(firstBlk.getFirstStartAddress());
+        smarBlk.setCPUState(m_registers, m_memories);
 
         // Should be a loop, if any symbolic state for any block has changed in the last round
         try {
-            CodeBlock firstBlk = blkModel.getCodeBlockAt(addr, m_monitor);
-            // Obtain the wrapper object for GHIDRA's basic block
-            BlockSMAR smarBlk = m_blocks.get(firstBlk.getFirstStartAddress());
-
             //have_visited_bb_this_round [curr_bb] = False // For all basic blocks, set to false
 
             /* traverse all code-blocks recusively in depth-first search (DFS) order */
-            smarBlk.traverseBlocksOnce(m_SMARTable, m_registers, m_memories);
+            smarBlk.traverseBlocksOnce();
         }
         catch (Exception e) {
             /* fixe-me: ignore current function */
@@ -221,30 +215,46 @@ class FunctionSMAR {
         return true;
     }
 
-    Map<String, Set<String>> getMAARTable() {
+    Map<Long, Map<String, Set<String>>> getSMARTable() {
+        if (m_SMARTable == null) {
+            m_SMARTable = new HashMap<Long, Map<String, Set<String>>>();   // Symbolic Store
+            Map<Long, Map<String, Set<String>>> smart;
+
+            for (BlockSMAR blk: m_blocks.values()) {
+                smart = blk.getSMARTable();
+
+                if (smart != null) m_SMARTable.putAll(smart);
+            }
+        }
         return  m_SMARTable;
     }
 }
 
 
-/* just for x86-64 */
+/* Basic block Representation for a given function, a wrapper of Ghidra's basic block */
 class BlockSMAR {
     private HardwareArch m_arch;
     private Program m_program;
     private Listing m_listDB;
     private Function m_function;
-    private CodeBlock m_block;
+    private CodeBlock m_block;          // Ghidra's basic block
+
+    private Set<BlockSMAR> m_nexts;     // A set of successors
+    private Boolean m_bVisted;          // Visted in current cycle
+
+    /* Each basic block has its own SMARTable, used for storing memory access record*/
+    Map<Long, Map<String, Set<String>>> m_smarTable;
+
+    /* CPU state */
+    private class CPUState {
+        Map<String, String> regs;
+        Map<String, String> mems;
+    }
+    private Set<CPUState> m_CPUState;
+    private CPUState m_curCPUState;
 
 
-    private Set<BlockSMAR> m_nexts;         // CFG Representation for a given function, stored as a list of succ. for a block
-    private int m_runs;
-
-    private final OperandType OPRDTYPE;
-
-    /* used as pointers */
-    Map<String, Set<String>> m_smarTable;
-    Map<String, String> m_regStatus;
-    Map<String, String> m_memStatus;
+    private final OperandType OPRDTYPE;     // Used for testing operand types
 
 
     public BlockSMAR(HardwareArch arch, Program program, Listing listintDB, Function function, CodeBlock block) {
@@ -254,81 +264,133 @@ class BlockSMAR {
         m_function = function;
         m_block = block;
 
-        OPRDTYPE = new OperandType();
-        m_runs = 0;
+        m_bVisted = false;
+        m_CPUState = null;
+
+        OPRDTYPE = m_arch.getOprdTester();
+
+        /* Each basic block has its own SMARTable */
+        m_smarTable = new HashMap<Long, Map<String, Set<String>>>();
     }
+
 
     public CodeBlock getCodeBlock() {
         return m_block;
     }
 
+
+    public Map<Long, Map<String, Set<String>>> getSMARTable() {
+        return m_smarTable;
+    }
+
+
+    public int getNumOfCPUState() {
+        if (m_CPUState == null)
+            return 0;
+        else
+            return m_CPUState.size();
+    }
+
+
     public void setNexts(Set<BlockSMAR> nexts) {
         m_nexts = nexts;
     }
 
-    public Set<BlockSMAR> getNexts() {
-        return m_nexts;
+
+    public void setCPUState(Map<String, String> register_status, Map<String, String> memory_status) {
+        if (m_CPUState == null) {
+            m_CPUState = new HashSet<CPUState>();
+        }
+
+        /* Create a new instance of CPUState */
+        CPUState s = new CPUState();
+
+        m_CPUState.add(s);
+        s.regs = register_status;
+        s.mems = memory_status;
     }
+
+
+    private void setCPUState(CPUState state, Boolean reuse) {
+        if (m_CPUState == null) {
+            m_CPUState = new HashSet<CPUState>();
+        }
+
+        if (reuse) {
+            m_CPUState.add(m_curCPUState);
+        }
+        else {
+            /* Create a new instance of CPUState */
+            CPUState s = new CPUState();
+            HashMap<String, String> regs =  (HashMap<String, String>)state.regs;
+            HashMap<String, String> mems =  (HashMap<String, String>)state.mems;
+
+            s = new CPUState();
+            m_CPUState.add(s);
+
+            s.regs = (Map<String, String>)regs.clone();
+            s.mems = (Map<String, String>)mems.clone();
+        }
+    }
+
 
     /* traverse all code-blocks recusively */
-    public boolean traverseBlocksOnce(Map<String, Set<String>> memory_access_table, HashMap<String, String> register_status, HashMap<String, String> memory_status) {
+    public void traverseBlocksOnce() {
         /* Recording the state of the symbolic memory store at the start of the current code block */
-        //is (new_memacc_table != existing_access_table) set_dirty (curr_bb);
-        doRecording(memory_access_table, register_status, memory_status);
 
-        //have_visited_bb_this_round [curr_bb] = True; //
+        /* Current block is already visted, no need to travers at current cycle */
+        m_bVisted = true;
 
-        /* travers the next blocks in DFS order */
-        if (m_nexts.size() >= 1) {
+        /* traverse all next-blocks for each CPUstate */
+        for (CPUState cpuState: m_CPUState) {
+            m_curCPUState = cpuState;
+
+            //is (new_memacc_table != existing_access_table) set_dirty (curr_bb);
+            doRecording();
+
+            /* traverse the next blocks in DFS order */
+            int cntNxt = m_nexts.size();
             for (BlockSMAR nextBlk: m_nexts) {
-                //if (have_visited_bb_this_round) continue;
+                cntNxt--;
 
-                // To remove
-                boolean bLoopBack = (nextBlk.m_block.getFirstStartAddress().getOffset() < m_block.getFirstStartAddress().getOffset());
-                if (bLoopBack && nextBlk.getRunCount() > 10) {
-                    continue;   // skip this one
+                if (nextBlk.m_bVisted) {
+                    /* traverse the next block in next cycle */
+                    nextBlk.setCPUState(cpuState, false);
+                    continue;
+                }
+
+                /* fork register status if needs */
+                if (cntNxt > 1) {
+                    nextBlk.setCPUState(cpuState, false);
                 }
                 else {
-                    /* fork register status if needs */
-                    HashMap<String, String> regs;
-                    HashMap<String, String> mems;
-                    if (m_nexts.size() >= 2) {
-                        regs = (HashMap<String, String>)register_status.clone();
-                        mems = (HashMap<String, String>)memory_status.clone();
-                    }
-                    else {
-                        regs = register_status;
-                        mems = memory_status;
-                    }
-
-                    nextBlk.traverseBlocksOnce(memory_access_table, regs, mems);
+                    nextBlk.setCPUState(cpuState, true);
                 }
+
+                /* traverse next block */
+                nextBlk.traverseBlocksOnce();
             }
         }
-        return true;
+        /* All CPUState have been consumed */
+        m_curCPUState = null;
+        m_CPUState = null;
     }
 
 
-    String getRegValue(String register) {
+    private String getRegValue(String register) {
         String reg, val;
 
         reg = m_arch.getRegisterFullname(register);
-        return m_regStatus.get(reg);
+        return m_curCPUState.regs.get(reg);
     }
 
 
-    String getMemValue(String address) {
-        return m_memStatus.get(address);
+    private String getMemValue(String address) {
+        return m_curCPUState.mems.get(address);
     }
 
 
-    void doRecording(Map<String, Set<String>> memory_access_table, HashMap<String, String> register_status, HashMap<String, String> memory_status) {
-        m_runs += 1;    // increase execution counter
-
-        m_smarTable = memory_access_table;
-        m_regStatus = register_status;
-        m_memStatus = memory_status;
-
+    private void doRecording() {
         /* iterate every instruction in this block */
         AddressSet addrSet = m_block.intersect(m_function.getBody());
         InstructionIterator iiter = m_listDB.getInstructions(addrSet, true);
@@ -354,6 +416,7 @@ class BlockSMAR {
         }
     }
 
+
     void _doRecording0(InstructionDB inst) {
         System.out.println("331: " + inst.toString());
         String op = inst.getMnemonicString();
@@ -375,14 +438,16 @@ class BlockSMAR {
         }
     }
 
+
     private void _record0ret(InstructionDB inst) {
         /* pop rip */
         String strValue;
         /* Update RSP register status */
         strValue = getRegValue("RSP");
         strValue = symbolicAdd(strValue, 8);
-        updateRegister("RSP", strValue);
+        updateRegister(inst.getAddress().getOffset(), "RSP", strValue);
     }
+
 
     private void _record0leave(InstructionDB inst) {
         /* mov rsp, rbp; pop rbp */
@@ -391,21 +456,21 @@ class BlockSMAR {
 
         /* mov rsp, rbp */
         strValBP = getRegValue("RBP");
-        updateRegister("RSP", strValBP);
+        updateRegister(inst.getAddress().getOffset(), "RSP", strValBP);
 
         /* pop rbp */
         strValSP = getRegValue("RSP");
         strValue = getMemValue(strValSP);
-        updateRegister("RBP", strValue);
+        updateRegister(inst.getAddress().getOffset(),  "RBP", strValue);
 
         /* Clean memory status */
         strValSP = getRegValue("RSP");
-        m_memStatus.remove(strValSP);
+        m_curCPUState.mems.remove(strValSP);
 
         /* Update register RSP */
         strValSP = getRegValue("RSP");
         strValue = symbolicAdd(strValSP, 8);
-        updateRegister("RSP", strValue);
+        updateRegister(inst.getAddress().getOffset(), "RSP", strValue);
     }
 
 
@@ -444,6 +509,7 @@ class BlockSMAR {
         }
     }
 
+
     private void _record1push(InstructionDB inst) {
         String strAddr = null;
         String strValue = null;
@@ -467,11 +533,11 @@ class BlockSMAR {
         /* Update MAR-table & register status */
         strAddr = getRegValue("RSP");
         strAddr = symbolicSub(strAddr, 8);
-        updateRegister("RSP", strAddr);
+        updateRegister(inst.getAddress().getOffset(), "RSP", strAddr);
 
         /* Update MAR-table & memory status */
         strAddr = getRegValue("RSP");
-        updateMemoryWriteAccess(strAddr, strValue);
+        updateMemoryWriteAccess(inst.getAddress().getOffset(), strAddr, strValue);
     }
 
     private void _record1pop(InstructionDB inst) {
@@ -487,21 +553,21 @@ class BlockSMAR {
         assert(OPRDTYPE.isRegister(oprdty));
 
         // strAddr = getRegValue("RSP");
-        // updateMemoryReadAccess(strAddr);
+        // updateMemoryReadAccess(inst.getAddress().getOffset(), strAddr);
 
         /* Get value from stack && update rigister status */
         strValue = getRegValue("RSP");
         strValue = getMemValue(strValue);
-        updateRegister(oprd, strValue);
+        updateRegister(inst.getAddress().getOffset(), oprd, strValue);
 
         /* Clean memory status */
         strValue = getRegValue("RSP");
-        m_memStatus.remove(strValue);
+        m_curCPUState.mems.remove(strValue);
 
         /* Update RSP register status */
         strValue = getRegValue("RSP");
         strValue = symbolicAdd(strValue, 8);
-        updateRegister("RSP", strValue);
+        updateRegister(inst.getAddress().getOffset(), "RSP", strValue);
     }
 
     private void _record1retn(InstructionDB inst) {
@@ -512,7 +578,7 @@ class BlockSMAR {
         /* Update RSP register status */
         strValSP = getRegValue("RSP");
         strValue = symbolicAdd(strValSP, Integer.decode(oprd) + 8);
-        updateRegister("RSP", strValue);
+        updateRegister(inst.getAddress().getOffset(), "RSP", strValue);
     }
 
     void _doRecording2(InstructionDB inst) {
@@ -577,7 +643,7 @@ class BlockSMAR {
                 else
                     strValue = strVal0; //fix-me
 
-                updateRegister(oprd0, strValue);
+                updateRegister(inst.getAddress().getOffset(), oprd0, strValue);
             }
             else if (OPRDTYPE.isScalar(oprd1ty)){
                 /* sub rsp, 8; */
@@ -591,7 +657,7 @@ class BlockSMAR {
                     strValue = strVal0;
 
                 /* upate register status */
-                updateRegister(oprd0, strValue);
+                updateRegister(inst.getAddress().getOffset(), oprd0, strValue);
             }
             else {
                 /* others */
@@ -600,7 +666,7 @@ class BlockSMAR {
                 strAddr1 = _getMemAddress(objs);
 
                 /* update memory read access */
-                updateMemoryReadAccess(strAddr1);
+                updateMemoryReadAccess(inst.getAddress().getOffset(), strAddr1);
 
                 /* fetch the value from the memory elememt */
                 strVal1 = getMemValue(strAddr1);
@@ -614,7 +680,7 @@ class BlockSMAR {
                     strValue = strVal0;
 
                 /* upate register status */
-                updateRegister(oprd0, strValue);
+                updateRegister(inst.getAddress().getOffset(), oprd0, strValue);
             }
         }
         else {
@@ -648,7 +714,7 @@ class BlockSMAR {
                 strValue = strVal0;
 
             /* update memory write access */
-            updateMemoryWriteAccess(strAddr0, strValue);
+            updateMemoryWriteAccess(inst.getAddress().getOffset(), strAddr0, strValue);
         }
     }
 
@@ -672,7 +738,7 @@ class BlockSMAR {
                 oprd1 = inst.getDefaultOperandRepresentation(1);
 
                 strVal1  = getRegValue(oprd1);
-                updateRegister(oprd0, strVal1);
+                updateRegister(inst.getAddress().getOffset(), oprd0, strVal1);
             }
             else if (OPRDTYPE.isScalar(oprd1ty)){
                 /* mov rax, 8; */
@@ -680,20 +746,20 @@ class BlockSMAR {
                 strVal1 = oprd1;
 
                 /* upate register status */
-                updateRegister(oprd0, strVal1);
+                updateRegister(inst.getAddress().getOffset(), oprd0, strVal1);
             }
             else { /* memory oprand */
                 objs = inst.getOpObjects(1);
                 strAddr1 = _getMemAddress(objs);
 
                 /* update memory read access */
-                updateMemoryReadAccess(strAddr1);
+                updateMemoryReadAccess(inst.getAddress().getOffset(), strAddr1);
 
                 /* fetch the value from the memory elememt */
                 strVal1 = getMemValue(strAddr1);
 
                 /* upate register status */
-                updateRegister(oprd0, strVal1);
+                updateRegister(inst.getAddress().getOffset(), oprd0, strVal1);
             }
         }
         else {
@@ -717,7 +783,7 @@ class BlockSMAR {
             strAddr0 = _getMemAddress(objs);
 
             /* update memory write access */
-            updateMemoryWriteAccess(strAddr0, strVal1);
+            updateMemoryWriteAccess(inst.getAddress().getOffset(), strAddr0, strVal1);
         }
     }
 
@@ -743,7 +809,7 @@ class BlockSMAR {
         strValue = strAddr1;
 
         /* upate register status */
-        updateRegister(oprd0, strValue);
+        updateRegister(inst.getAddress().getOffset(), oprd0, strValue);
     }
 
 
@@ -778,7 +844,7 @@ class BlockSMAR {
                 strAddr1 = _getMemAddress(objs);
 
                 /* update memory read access */
-                updateMemoryReadAccess(strAddr1);
+                updateMemoryReadAccess(inst.getAddress().getOffset(), strAddr1);
 
                 /* fetch the value from the memory elememt */
                 strVal1 = getMemValue(strAddr1);
@@ -787,7 +853,7 @@ class BlockSMAR {
             System.out.println("754: " + strVal1);
             /* upate register status */
             strValue = symbolicXor(strVal0, strVal1);
-            updateRegister(oprd0, strValue);
+            updateRegister(inst.getAddress().getOffset(), oprd0, strValue);
         }
         else {
             /* Ghidra bug: MOV [RAX],RDX -> _, ADDR|REG */
@@ -810,14 +876,14 @@ class BlockSMAR {
             strAddr0 = _getMemAddress(objs);
 
             /* update memory read access */
-            updateMemoryReadAccess(strAddr0);
+            updateMemoryReadAccess(inst.getAddress().getOffset(), strAddr0);
 
             /* fetch the value from the memory elememt */
             strVal0 = getMemValue(strAddr0);
             /* update memory write access */
             strValue = symbolicXor(strVal0, strVal1);
 
-            updateMemoryWriteAccess(strAddr0, strValue);
+            updateMemoryWriteAccess(inst.getAddress().getOffset(), strAddr0, strValue);
         }
     }
 
@@ -888,70 +954,104 @@ class BlockSMAR {
         }
     }
 
-    private boolean updateRegister(String reg, String value) {
+    private boolean updateRegister(long line_no, String reg, String value) {
+        Map<String, Set<String>> tmpMap;
         Set<String> tmpSet;
 
-        /* Update MAR-table for Register reg */
-        tmpSet = m_smarTable.get(reg);
-        if (tmpSet == null) {
-            reg = m_arch.getRegisterFullname(reg);
-            tmpSet = m_smarTable.get(reg);
+        /* Update SMAR-table for Register reg */
+        tmpMap = m_smarTable.get(line_no);
+        if (tmpMap == null) {
+            tmpMap = new HashMap<String, Set<String>>();
+            m_smarTable.put(line_no, tmpMap);
         }
+
+        reg = m_arch.getRegisterFullname(reg);
+        tmpSet = tmpMap.get(reg);
+        if (tmpSet == null) {
+            tmpSet = new HashSet<String>();
+            tmpMap.put(reg, tmpSet);
+        }
+
         assert(tmpSet != null);
         tmpSet.add(value);
 
         /* for debugging */
-        System.out.println(String.format("674: %s = %s", reg, value));
+        System.out.println(String.format("674: @0x%x: %s = %s", line_no, reg, value));
 
         /* Update register status */
-        m_regStatus.put(reg, value);
+        m_curCPUState.regs.put(reg, value);
 
         return true;
     }
 
-    private boolean updateMemoryWriteAccess(String address, String value) {
+    private boolean updateMemoryWriteAccess(long line_no, String address, String value) {
+        Map<String, Set<String>> tmpMap;
         Set<String> tmpSet;
 
         /* Update MAR-table for address */
-        tmpSet = m_smarTable.get(address);
+        tmpMap = m_smarTable.get(line_no);
+        if (tmpMap == null) {
+            tmpMap = new HashMap<String, Set<String>>();
+            m_smarTable.put(line_no, tmpMap);
+        }
+
+        tmpSet = tmpMap.get(address);
         if (tmpSet == null) {
             tmpSet = new HashSet<String>();
-            m_smarTable.put(address, tmpSet);
+            tmpMap.put(address, tmpSet);
         }
+
+        assert(tmpSet != null);
         tmpSet.add(value);
 
         /* for debuging */
-        System.out.println(String.format("686: [%s] = %s", address, value));
+        System.out.println(String.format("686: @0x%x: [%s] = %s", line_no, address, value));
 
         /* Update memory status */
-        m_memStatus.put(address, value);
+        m_curCPUState.mems.put(address, value);
 
         return true;
     }
 
-    private boolean updateMemoryReadAccess(String address) {
+    private boolean updateMemoryReadAccess(long line_no, String address) {
+        Map<String, Set<String>> tmpMap;
         Set<String> tmpSet;
+        String value, symbol;
 
-        /* Update MAR-table for address */
-        tmpSet = m_smarTable.get(address);
-        if (tmpSet == null) {
-            String symbol;
+        value = m_curCPUState.mems.get(address);
+        if (value == null) {
+            
 
-            tmpSet = new HashSet<String>();
-            m_smarTable.put(address, tmpSet);
-
-            /* make the content of current address to a symbolic value */
+            /* Creat a symbolic value at the current address */
             if (address.indexOf(' ') != -1) {
                 symbol = String.format("V(%s)", address.replaceAll("\\s+",""));
             }
             else {
                 symbol = "V" + address;
             }
-            tmpSet.add(symbol);     // Set a symbolic value
 
-            /* Update memory status */
-            m_memStatus.put(address, symbol);
+            /* Update memory state */
+            m_curCPUState.mems.put(address, symbol);
         }
+        else {
+            symbol = value;
+        }
+
+        /* Update MAR-table for memory read */
+        tmpMap = m_smarTable.get(line_no);
+        if (tmpMap == null) {
+            tmpMap = new HashMap<String, Set<String>>();
+            m_smarTable.put(line_no, tmpMap);
+        }
+
+        tmpSet = tmpMap.get(address);
+        if (tmpSet == null) {
+            tmpSet = new HashSet<String>();
+            tmpMap.put(address, tmpSet);
+            
+            tmpSet.add(symbol);     // Set a symbolic value
+        }
+
         return true;
     }
 
@@ -1059,15 +1159,14 @@ class BlockSMAR {
     }
 
 
-    int getRunCount() {
-        return m_runs;
-    }
+
 }
 
 
 interface HardwareArch {
     public String[] getAllRegisters();
     public String getRegisterFullname(String reg);
+    public OperandType getOprdTester();
 }
 
 
@@ -1083,6 +1182,7 @@ class LArchX86 implements HardwareArch {
     private Map<String, String> m_RegMap;
     private String[] m_AllRegs;
 
+    private OperandType m_oprdTor;  // Use for testing opranad types
 
     LArchX86 () {
         m_RegMap = new HashMap<String, String>();
@@ -1116,6 +1216,8 @@ class LArchX86 implements HardwareArch {
         for (idx = 0; idx < m_Regs8l.length; idx++) {
             m_RegMap.put(m_Regs8l[idx], m_Regs64[idx]);
         }
+
+        m_oprdTor = new OperandType();
     }
 
     /* Get all kinds of registers of this platform */
@@ -1136,5 +1238,10 @@ class LArchX86 implements HardwareArch {
 
     public String getRegisterFullname(String reg) {
         return m_RegMap.get(reg);
+    }
+
+
+    public OperandType getOprdTester() {
+        return m_oprdTor;
     }
 }
