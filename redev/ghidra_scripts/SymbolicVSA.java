@@ -60,7 +60,7 @@ public class SymbolicVSA extends GhidraScript {
             long fentry = f.getEntryPoint().getOffset();
 
             // Entry-point
-            if (fentry != 0x0400546)
+            if (fentry != 0x402217)
                 continue;
 
             println("Function Entry: " + f.getEntryPoint());
@@ -70,7 +70,7 @@ public class SymbolicVSA extends GhidraScript {
             smar.doRecording();
 
             Map<Long, Map<String, Set<String>>> smart = smar.getSMARTable();
-            
+
             println(smart.toString());
         }
     }
@@ -121,7 +121,6 @@ class FunctionSMAR {
         m_registers = new HashMap<String, String>();        // CPU State : Registers
         m_memories = new HashMap<String, String>();         // CPU State : Memory slot
 
-        InitMachineStatus();
         constructCFG();
     }
 
@@ -200,20 +199,56 @@ class FunctionSMAR {
         BlockSMAR smarBlk = m_blocks.get(firstBlk.getFirstStartAddress());
         smarBlk.setCPUState(m_registers, m_memories);
 
-        // Should be a loop, if any symbolic state for any block has changed in the last round
         try {
-            //have_visited_bb_this_round [curr_bb] = False // For all basic blocks, set to false
+            InitMachineStatus();
 
-            /* traverse all code-blocks recusively in depth-first search (DFS) order */
-            smarBlk.traverseBlocksOnce();
+            // Should be a loop, if any symbolic state for any block has changed in the last round
+            int nExecutedBlks = 0;
+
+            while (true) {
+                /* Test if there are blocks have CPUstate to run? */
+                smarBlk = null;
+                for (BlockSMAR blk: m_blocks.values()) {
+                    int nState = blk.getNumOfCPUState();
+                    if (nState > 0) {
+                        smarBlk = blk;
+                        break;
+                    }
+                }
+
+                if (smarBlk == null)  break;
+
+                /* smarBlk != null */
+                System.out.println("210: Start traversing");
+
+                int nBlks = traverseBlocksOnce(smarBlk);
+                if (nBlks == nExecutedBlks) {
+                    /* there is a loop */
+                    System.out.println("233: There is a loop?");
+                }
+                nExecutedBlks = nBlks;
+            }
         }
         catch (Exception e) {
             /* fixe-me: ignore current function */
-            System.err.println("Failed to traversBlock");
+            System.out.println("255: Failed to traversBlocks");
         }
-
         return true;
     }
+
+
+    private int traverseBlocksOnce(BlockSMAR start_block) {
+        /* traverse all code-blocks recusively in depth-first search (DFS) order */
+        for (BlockSMAR blk: m_blocks.values()) {
+            blk.m_bVisted = false;
+        }
+
+        int nExecutedBlks;
+
+        nExecutedBlks = start_block.runControlFlowOnce();
+        return nExecutedBlks;
+    }
+
 
     Map<Long, Map<String, Set<String>>> getSMARTable() {
         if (m_SMARTable == null) {
@@ -240,7 +275,7 @@ class BlockSMAR {
     private CodeBlock m_block;          // Ghidra's basic block
 
     private Set<BlockSMAR> m_nexts;     // A set of successors
-    private Boolean m_bVisted;          // Visted in current cycle
+    public Boolean m_bVisted;           // Visted in current cycle
 
     /* Each basic block has its own SMARTable, used for storing memory access record*/
     Map<Long, Map<String, Set<String>>> m_smarTable;
@@ -255,6 +290,32 @@ class BlockSMAR {
 
 
     private final OperandType OPRDTYPE;     // Used for testing operand types
+
+
+    private class UnspportInstruction extends RuntimeException {
+        UnspportInstruction(String lineno, InstructionDB instr) {
+            System.out.println(String.format("%s: %s, unsupported Instruction", lineno, instr.toString()));
+        }
+    }
+
+
+    private class InvalidOperand extends RuntimeException {
+        InvalidOperand(String lineno, InstructionDB instr, int operand_index) {
+            /* print some details */
+            System.out.println(String.format("%s: %s has inavlid operand", lineno, instr.toString()));
+            for (Object o: instr.getOpObjects(operand_index)) {
+                System.out.println(o.getClass().getName());
+            }
+        }
+
+        InvalidOperand(String lineno, Object [] objs) {
+            /* print some details */
+            System.out.println(String.format("%s: inavlid operand", lineno));
+            for (Object o: objs) {
+                System.out.println(o.getClass().getName());
+            }
+        }
+    }
 
 
     public BlockSMAR(HardwareArch arch, Program program, Listing listintDB, Function function, CodeBlock block) {
@@ -317,32 +378,31 @@ class BlockSMAR {
         }
 
         if (reuse) {
-            m_CPUState.add(m_curCPUState);
+            m_CPUState.add(state);
         }
         else {
             /* Create a new instance of CPUState */
             CPUState s = new CPUState();
-            HashMap<String, String> regs =  (HashMap<String, String>)state.regs;
-            HashMap<String, String> mems =  (HashMap<String, String>)state.mems;
 
-            s = new CPUState();
+            s.regs = (Map<String, String>)((HashMap<String, String>)state.regs).clone();
+            s.mems = (Map<String, String>)((HashMap<String, String>)state.mems).clone();
             m_CPUState.add(s);
-
-            s.regs = (Map<String, String>)regs.clone();
-            s.mems = (Map<String, String>)mems.clone();
         }
     }
 
 
     /* traverse all code-blocks recusively */
-    public void traverseBlocksOnce() {
+    public int runControlFlowOnce() {
         /* Recording the state of the symbolic memory store at the start of the current code block */
 
         /* Current block is already visted, no need to travers at current cycle */
+        int nExcutedBlks = 1;
+
         m_bVisted = true;
 
         /* traverse all next-blocks for each CPUstate */
-        for (CPUState cpuState: m_CPUState) {
+        for (Iterator<CPUState> itor = m_CPUState.iterator(); itor.hasNext();) {
+            CPUState cpuState = itor.next();
             m_curCPUState = cpuState;
 
             //is (new_memacc_table != existing_access_table) set_dirty (curr_bb);
@@ -368,12 +428,17 @@ class BlockSMAR {
                 }
 
                 /* traverse next block */
-                nextBlk.traverseBlocksOnce();
+                nExcutedBlks += nextBlk.runControlFlowOnce();
             }
+
+            /* use itor.remove() instead of Set.remove() */
+            itor.remove();
         }
+
         /* All CPUState have been consumed */
         m_curCPUState = null;
-        m_CPUState = null;
+
+        return nExcutedBlks;
     }
 
 
@@ -381,7 +446,9 @@ class BlockSMAR {
         String reg, val;
 
         reg = m_arch.getRegisterFullname(register);
-        return m_curCPUState.regs.get(reg);
+        val = m_curCPUState.regs.get(reg);
+
+        return val;
     }
 
 
@@ -399,19 +466,31 @@ class BlockSMAR {
             InstructionDB inst = (InstructionDB)iiter.next();
             int nOprand = inst.getNumOperands();
 
-            if (nOprand == 0) {
-                _doRecording0(inst);
+            try {
+                if (nOprand == 0) {
+                    _doRecording0(inst);
+                }
+                else if (nOprand == 1)  {
+                    _doRecording1(inst);
+                }
+                else if (nOprand == 2)  {
+                    _doRecording2(inst);
+                }
+                else {
+                    /* Throw exception */
+                    throw new UnspportInstruction("483: %s ? oprands", inst);
+                }
             }
-            else if (nOprand == 1)  {
-                _doRecording1(inst);
-            }
-            else if (nOprand == 2)  {
-                _doRecording2(inst);
-            }
-            else {
-                /* Throw exception */
-                System.out.println("321: " + inst.toString());
-                System.out.println("323: throw exception");
+            catch (Exception e) {
+                if (e instanceof InvalidOperand) {
+
+                }
+                else if (e instanceof InvalidOperand) {
+
+                }
+                else {
+                    System.out.println(String.format("485: %s err: %s", inst.toString(), e.toString()));
+                }
             }
         }
     }
@@ -434,7 +513,7 @@ class BlockSMAR {
         }
 
         else {
-            System.out.println("333: fix-me, other instructions");
+            throw new UnspportInstruction("333: 0 oprands", inst);
         }
     }
 
@@ -505,7 +584,7 @@ class BlockSMAR {
         }
 
         else {
-            System.out.println("387: fix-me, other instruction");
+            throw new UnspportInstruction("582: 1 oprands", inst);
         }
     }
 
@@ -603,6 +682,10 @@ class BlockSMAR {
             _record2mov(inst);
         }
 
+        else if (op.equalsIgnoreCase("movaps")) {
+            _record2mov(inst);
+        }
+
         else if (op.equalsIgnoreCase("lea")) {
             _record2lea(inst);
         }
@@ -611,8 +694,12 @@ class BlockSMAR {
             _record2xor(inst);
         }
 
+        else if (op.equalsIgnoreCase("test")) {
+            _record2test(inst);
+        }
+
         else {
-            System.out.println("347: fix-me");
+            throw new UnspportInstruction("689: 2 oprands", inst);
         }
     }
 
@@ -650,9 +737,9 @@ class BlockSMAR {
                 oprd1 = inst.getDefaultOperandRepresentation(1);
 
                 if (op == '+')
-                    strValue = symbolicAdd(strVal0, Integer.decode(oprd1));
+                    strValue = symbolicAdd(strVal0, Long.decode(oprd1));
                 else if (op == '-')
-                    strValue = symbolicSub(strVal0, Integer.decode(oprd1));
+                    strValue = symbolicSub(strVal0, Long.decode(oprd1));
                 else
                     strValue = strVal0;
 
@@ -695,9 +782,8 @@ class BlockSMAR {
                 strVal1 = oprd1;
             }
             else {
-                /* Throw exeception */
-                strVal1 = "";
-                System.out.println("549: throw exception");
+                /* Operand 1 is invalid, throw exeception */
+                throw new InvalidOperand("773", inst, 1);
             }
 
             objs = inst.getOpObjects(0);
@@ -773,9 +859,8 @@ class BlockSMAR {
                 strVal1 = oprd1;
             }
             else {
-                /* Throw exeception */
-                strVal1 = "";
-                System.out.println("600: throw exception");
+                /* Operand 1 is invalid, throw exeception */
+                throw new InvalidOperand("858", inst, 1);
             }
 
             objs = inst.getOpObjects(0);
@@ -850,7 +935,6 @@ class BlockSMAR {
                 strVal1 = getMemValue(strAddr1);
             }
 
-            System.out.println("754: " + strVal1);
             /* upate register status */
             strValue = symbolicXor(strVal0, strVal1);
             updateRegister(inst.getAddress().getOffset(), oprd0, strValue);
@@ -866,9 +950,8 @@ class BlockSMAR {
                 strVal1 = oprd1;
             }
             else {
-                /* Throw exeception */
-                strVal1 = "";
-                System.out.println("770: throw exception");
+                /* Operand 1 is invalid, throw exeception */
+                throw new InvalidOperand("949", inst, 1);
             }
 
             objs = inst.getOpObjects(0);
@@ -884,6 +967,53 @@ class BlockSMAR {
             strValue = symbolicXor(strVal0, strVal1);
 
             updateMemoryWriteAccess(inst.getAddress().getOffset(), strAddr0, strValue);
+        }
+    }
+
+
+    private void _record2test(InstructionDB inst) {
+        /* test reg, reg; test reg, mem; test reg, 0x1234; test mem, reg; test mem, 0x1234 */
+        int oprd0ty = inst.getOperandType(0);
+        int oprd1ty = inst.getOperandType(1);
+
+        String strVal0, strVal1, strAddr0, strAddr1;
+        String strValue, strAddress;
+        String oprd0, oprd1;
+        long iVal0, iVal1;
+
+        Object[] objs;
+
+        /* test oprand 0 */
+        if (OPRDTYPE.isRegister(oprd0ty)) {
+            /* do nothing */
+        }
+        else if (OPRDTYPE.isScalar(oprd0ty)){
+            throw new InvalidOperand("987", inst, 0);
+        }
+        else {
+            /* memory oprand */
+            objs = inst.getOpObjects(0);
+            strAddr0 = _getMemAddress(objs);
+
+            /* update memory read access */
+            updateMemoryReadAccess(inst.getAddress().getOffset(), strAddr0);
+        }
+
+
+        /* test oprand 1 */
+        if (OPRDTYPE.isRegister(oprd1ty)) {
+            /* do nothing */
+        }
+        else if (OPRDTYPE.isScalar(oprd1ty)){
+            /* do nothing */
+        }
+        else {
+            /* memory oprand */
+            objs = inst.getOpObjects(1);
+            strAddr1 = _getMemAddress(objs);
+
+            /* update memory read access */
+            updateMemoryReadAccess(inst.getAddress().getOffset(), strAddr1);
         }
     }
 
@@ -918,39 +1048,65 @@ class BlockSMAR {
             }
 
             else {
-                /* Throw exception */
-                System.err.println("850: throw exception");
-                System.err.println("849: " + objs[0].getClass().getName());
-
-                return "";
+                /* This operand is invalid, throw exeception */
+                throw new InvalidOperand("992", objs_of_MemOperand);
             }
         }
         else if (objs.length == 2) {
-            /* Registet + Scaler: i.e [RBP + -0x28] */
-            assert((objs[0] instanceof Register) && (objs[1] instanceof Scalar));
-            Register r = (Register)objs[0];
-            Scalar s = (Scalar)objs[1];
+            /* Registet + Scaler: i.e [RBP + -0x28]
+             * Registet + Scaler: [-0xf8 + RBP]
+             */
+            Register r;
+            Scalar s;
+
+            if ((objs[0] instanceof Register) && (objs[1] instanceof Scalar)) {
+                r = (Register)objs[0];
+                s = (Scalar)objs[1];
+            }
+            else if ((objs[0] instanceof Scalar) && (objs[1] instanceof Register)) {
+                r = (Register)objs[1];
+                s = (Scalar)objs[0];
+            }
+            else {
+                throw new InvalidOperand("1019", objs_of_MemOperand);
+            }
 
             strValue = getRegValue(r.getName());
             strAddress = symbolicAdd(strValue, s.getValue());
 
             return strAddress;
         }
+
         else if (objs.length == 3) {
-            /* fix-me */
-            System.out.println("875: fix-me");
-            return "";
+            /* Registet + Register * Scaler: [RDX + RAX*0x1] */
+            if ((objs[0] instanceof Register) && (objs[1] instanceof Register) && (objs[2] instanceof Scalar)) {
+                Register rb, ri;
+                Scalar s;
+                String vb, vi;
+
+                rb = (Register)objs[0];
+                ri = (Register)objs[1];
+                s = (Scalar)objs[2];
+
+                System.out.println(String.format("%s + %s*%d?", rb.getName(), ri.getName(), s.getValue()));
+                vb = getRegValue(rb.getName());
+                vi = getRegValue(ri.getName());
+
+                strValue = symbolicMul(vi, s.getValue());
+                strAddress = symbolicAdd(vb, strValue);
+
+                return strAddress;
+            }
+            else {
+                throw new InvalidOperand("1019", objs_of_MemOperand);
+            }
+
+
         }
 
         else {
-            /* Throw exception */
-            System.out.println("880: throw exception");
-
-            /* print some details */
-            for (Object o: objs) {
-                System.out.println("885: " + o.getClass().getName());
-            }
-            return "";
+            /* This operand is invalid, throw exeception */
+            throw new InvalidOperand("1030", objs_of_MemOperand);
         }
     }
 
@@ -1020,7 +1176,7 @@ class BlockSMAR {
 
         value = m_curCPUState.mems.get(address);
         if (value == null) {
-            
+
 
             /* Creat a symbolic value at the current address */
             if (address.indexOf(' ') != -1) {
@@ -1048,7 +1204,7 @@ class BlockSMAR {
         if (tmpSet == null) {
             tmpSet = new HashSet<String>();
             tmpMap.put(address, tmpSet);
-            
+
             tmpSet.add(symbol);     // Set a symbolic value
         }
 
@@ -1056,93 +1212,377 @@ class BlockSMAR {
     }
 
 
-    private String symbolicAdd(String symbol, long value) {
-        return _symbolicAddSub(symbol, '+', value);
-    }
-
-
-    private String symbolicSub(String symbol, long value) {
-        return _symbolicAddSub(symbol, '-', value);
-    }
-
     private String symbolicAdd(String symbol0, String symbol1) {
-        /* fix-me */
-        return symbol0;
+        return _symbolicBinaryOP(symbol0, '+', symbol1);
     }
+
 
     private String symbolicSub(String symbol0, String symbol1) {
-        /* fix-me */
-        return symbol0;
+        return _symbolicBinaryOP(symbol0, '-', symbol1);
     }
 
 
-    private String _symbolicAddSub(String symbol, char op, long value) {
-        /* parse the old symbolic value */
-        String[] elems = symbol.split("\\s", 0);
-        String sOprd = null;    // symbolic oprand
-        long curValue = 0;
+    private String _symbolicBinaryOP(String symbol0, char op, String symbol1) {
+        /* parse the symbolic value symbol0 */
+        String[] elems0 = symbol0.split("\\s", 0);
+        String part0S;      // Symbolic part in symbol0
+        long part0V;        // Value part in symbol0
 
-        if (elems.length == 1) {
-            if (elems[0].charAt(0) != 'V' && elems[0].charAt(0) != 'D') {
-                curValue = Integer.parseInt(elems[0]);
+        if (elems0.length == 1) {
+            if (elems0[0].charAt(0) != 'V' && elems0[0].charAt(0) != 'D') {
+                part0S = "";
+                part0V = Long.decode(elems0[0]);
             }
             else {
-                sOprd = elems[0];
+                part0S = elems0[0];
+                part0V = 0;
             }
         }
-        else if (elems.length == 2) {
-            curValue = Integer.parseInt(elems[1]);
-            sOprd = elems[0];
+        else if (elems0.length == 2) {
+            part0S = elems0[0];
+            part0V = Long.decode(elems0[1]);
         }
         else {
             /* Throw exception */
-            System.out.println("779: throw exception, wrong format");
+            Object[] objs = {symbol0};
+            throw new InvalidOperand("1248", objs);
         }
 
-        if (op == '+')
-            curValue += value;
-        else if (op == '-')
-            curValue -= value;
-        else /* Thow exception */
-            System.out.println("787: throw exception, Wrong format");
+        /* parse the symbolic value symbol1 */
+        String[] elems1 = symbol1.split("\\s", 0);
+        String part1S;    // Symbolic part in symbol0
+        long part1V;         // Value part in symbol0
 
-
-        /* generate new symbolic value */
-        String newSymbol;
-        long absValue ;
-
-        absValue = Math.abs(curValue);
-        if (sOprd == null) {
-            newSymbol = String.format("%d", curValue);
+        if (elems1.length == 1) {
+            if (elems1[0].charAt(0) != 'V' && elems1[0].charAt(0) != 'D') {
+                part1S = "";
+                part1V = Long.decode(elems1[0]);
+            }
+            else {
+                part1S = elems1[0];
+                part1V = 0;
+            }
+        }
+        else if (elems1.length == 2) {
+            part1S = elems1[0];
+            part1V = Long.decode(elems1[1]);
         }
         else {
-            if (curValue == 0)
-                newSymbol = sOprd;
-            else if (curValue > 0)
-                newSymbol = String.format("%s +%d", sOprd, absValue);
-            else
-                newSymbol = String.format("%s -%d", sOprd, absValue);
+            /* Throw exception */
+            Object[] objs = {symbol1};
+            throw new InvalidOperand("1278", objs);
+        }
+
+        /* calculate the result */
+        String tmpS, newSymbol;
+        long tmpV;
+
+        if (op == '+' || op == '-' ) {
+            tmpS = binaryOP(part0S, op, part1S);
+            tmpV = binaryOP(part0V, op,  part1V);
+            newSymbol = binaryOP(tmpS, '+', tmpV);
+        }
+        else if (op == '*') {
+            if (part0S == "" || part1S == "") {
+                tmpS = part0S + part1S;
+                if (part0S == "") {
+                    tmpS = binaryOP(tmpS, '*', part0V);
+                }
+                else {
+                    tmpS = binaryOP(tmpS, '*', part1V);
+                }
+                tmpV = binaryOP(part0V, '*', part1V);
+
+                newSymbol = binaryOP(tmpS, '+', tmpV);
+            }
+            else {
+                String tmpL, tmpR;
+                tmpS = binaryOP(part0S, '*', part1S);
+                tmpL = binaryOP(part0S, '*', part1V);
+                tmpR = binaryOP(part1S, '*', part0V);
+                tmpV = binaryOP(part0V, '*', part1V);
+
+                newSymbol = binaryOP(tmpS, '+', tmpL);
+                newSymbol = binaryOP(newSymbol, '+', tmpR);
+                newSymbol = binaryOP(newSymbol, '+', tmpV);
+            }
+        }
+        else if (op == '/') {
+            if (symbol0 == symbol1) {
+                newSymbol = "1";
+            }
+            else if (part0S == "" && part1S == "") {
+                tmpV = binaryOP(part0V, '/', part1V);
+                newSymbol = binaryOP("", '+', tmpV);
+            }
+            else {
+                newSymbol = String.format("D(%s%d/%s%d)", part0S, part0V, part1S, part1V);
+            }
+        }
+        else {
+            /* Thow exception */
+            Object[] objs = {"Unexpected operand"};
+            throw new InvalidOperand("1350", objs);
         }
 
         return newSymbol;
     }
 
 
-
-    String symbolicMul(String symbol, long value) {
-        /* fix me */
-        System.out.println("814: fix-me");
-        return symbol + "x" + String.valueOf(value);
+    private String symbolicAdd(String symbol, long value) {
+        return _symbolicBinaryOP(symbol, '+', value);
     }
 
 
-    String symbolicDiv(String symbol, long value) {
-        System.out.println("820: fix-me");
-        return symbol + "/" + String.valueOf(value);
+    private String symbolicSub(String symbol, long value) {
+        return _symbolicBinaryOP(symbol, '-', value);
     }
 
 
-    String symbolicXor(String symbol0, String symbol1) {
+    private String symbolicMul(String symbol, long value) {
+        return _symbolicBinaryOP(symbol, '*', value);
+    }
+
+
+    private String symbolicDiv(String symbol, long value) {
+        return _symbolicBinaryOP(symbol, '*', value);
+    }
+
+
+    /* Binary operation */
+    private String _symbolicBinaryOP(String symbol, char op, long value) {
+        /* parse the symbolic value */
+        String[] elems = symbol.split("\\s", 0);
+        String partS;       // symbolic part of symbol
+        long partV;         // Numeric part of symbol
+
+        if (elems.length == 1) {
+            if (elems[0].charAt(0) != 'V' && elems[0].charAt(0) != 'D') {
+                partS = "";
+                partV = Long.decode(elems[0]);
+            }
+            else {
+                partS = elems[0];
+                partV = 0;
+            }
+        }
+        else if (elems.length == 2) {
+            partS = elems[0];
+            partV = Long.decode(elems[1]);
+        }
+        else {
+            /* Throw exception */
+            String exp = String.format("%s %c 0x%x", symbol, op, value);
+            Object[] objs = {exp};
+            throw new InvalidOperand("1338", objs);
+        }
+
+        String newSymbol;
+        long newValue;
+
+        if (partS == "") {
+            newValue = binaryOP(partV, op, value);
+            newSymbol = binaryOP("", '+', newValue);
+        }
+        else if (partV == 0) {
+            newSymbol = binaryOP(partS, op, value);
+        }
+        else {
+            if (op == '+' || op == '-') {
+                newValue = binaryOP(partV, op, value);
+                newSymbol = binaryOP(partS, '+', newValue);
+            }
+            if (op == '*' || op == '/') {
+                newValue = binaryOP(partV, op, value);
+                newSymbol = binaryOP(partS, op, value);
+                newSymbol = binaryOP(newSymbol, '+', newValue);
+            }
+            else {
+                /* Thow exception */
+                Object[] objs = {"Unexpected operand"};
+                throw new InvalidOperand("1509", objs);
+            }
+        }
+
+        return newSymbol;
+    }
+
+    /* Pure symbolic value: [V|D]xxx | 0 | _ */
+    /* generate new symbolic value */
+    private String binaryOP(String pure_symbol0, char op, String pure_symbol1) {
+        assert(pure_symbol0 == "" || pure_symbol0 == "0" || pure_symbol0.charAt(0) == 'V' || pure_symbol0.charAt(0) == 'D');
+        assert(pure_symbol1 == "" || pure_symbol1 == "0" || pure_symbol1.charAt(0) == 'V' || pure_symbol1.charAt(0) == 'D');
+
+        String newSymbol;
+        long newValue;
+
+        if (pure_symbol0 == "0") pure_symbol0 = "";
+        if (pure_symbol1 == "0") pure_symbol1 = "";
+
+        if (op == '+') {
+            if (pure_symbol0 == "" || pure_symbol1 == "" ) {
+                newSymbol = pure_symbol0 + pure_symbol1;
+            }
+            else if (("-" + pure_symbol0) == pure_symbol1 || pure_symbol0 == ("-" + pure_symbol1))  {
+                newSymbol = "0";
+            }
+            else {
+                newSymbol = String.format("D(%s+%s)", pure_symbol0, pure_symbol1);
+            }
+        }
+        else if (op == '-')  {
+            if (pure_symbol0 == pure_symbol1) {
+                newSymbol = "0";
+            }
+            else if (pure_symbol0 == "") {
+                newSymbol = String.format("-%s", pure_symbol1);
+            }
+            else if (pure_symbol1 == "" ) {
+                newSymbol = pure_symbol0;
+            }
+            else {
+                newSymbol = String.format("D(%s-%s)", pure_symbol0, pure_symbol1);
+            }
+        }
+        else if (op == '*')  {
+            if (pure_symbol0 == "" || pure_symbol1 == "" ) {
+                newSymbol = "0";
+            }
+            else {
+                newSymbol = String.format("D(%s*%s)", pure_symbol0, pure_symbol1);
+            }
+        }
+        else if (op == '/')  {
+            if (pure_symbol0 == pure_symbol1) {
+                newSymbol = "1";
+            }
+            else if (pure_symbol0 == "") {
+                newSymbol = "0";
+            }
+            else if (pure_symbol1 == "" ) {
+                Object[] objs = {"Invalid operand"};
+                throw new InvalidOperand("1359", objs);
+            }
+            else {
+                newSymbol = String.format("D(%s/%s)", pure_symbol0, pure_symbol1);
+            }
+        }
+        else {
+            Object[] objs = {"Unexpected operation"};
+            throw new InvalidOperand("1611", objs);
+        }
+
+        return newSymbol;
+    }
+
+
+    /* generate new symbolic value */
+    private String binaryOP(String pure_symbol, char op, long value) {
+        assert(pure_symbol == "" || pure_symbol == "0" || pure_symbol.charAt(0) == 'V' || pure_symbol.charAt(0) == 'D');
+
+        String newSymbol;
+        long newValue;
+
+        if (pure_symbol == "0") pure_symbol = "";
+
+        if (pure_symbol == "") {
+            if (op == '+') {
+                newValue = value;
+            }
+            else if (op == '-')  {
+                newValue = 0 - value;
+            }
+            else if (op == '*')  {
+                newValue = 0;
+            }
+            else if (op == '/')  {
+                newValue = 0;
+            }
+            else {
+                Object[] objs = {"Unexpected operation"};
+                throw new InvalidOperand("1560", objs);
+            }
+
+            newSymbol = String.format("%d", newValue);
+        }
+        else if (value == 0) {
+            if (op == '+') {
+                newSymbol = pure_symbol;
+            }
+            else if (op == '-')  {
+                newSymbol = pure_symbol;
+            }
+            else if (op == '*')  {
+                newSymbol = "0";
+            }
+            else {
+                Object[] objs = {"Unexpected operation"};
+                throw new InvalidOperand("1577", objs);
+            }
+        }
+        else {
+            if (op == '+') {
+                newValue = value;
+                newSymbol = String.format("%s %d", pure_symbol, newValue);
+            }
+            else if (op == '-')  {
+                newValue = 0 - value;
+                newSymbol = String.format("%s %d", pure_symbol, newValue);
+            }
+            else if (op == '*')  {
+                newValue = value;
+
+                if (value == 1) {
+                    newSymbol = pure_symbol;
+                }
+                else {
+                    newSymbol = String.format("D(%s*%d)", pure_symbol, newValue);
+                }
+            }
+            else if (op == '/')  {
+                newValue = value;
+
+                if (value == 1) {
+                    newSymbol = pure_symbol;
+                }
+                else {
+                    newSymbol = String.format("D(%s/%d)", pure_symbol, newValue);
+                }
+            }
+            else {
+                Object[] objs = {"Unexpected operation"};
+                throw new InvalidOperand("1611", objs);
+            }
+        }
+
+        return newSymbol;
+    }
+
+    private long binaryOP(long value0, char op, long value1) {
+        long res;
+
+        if (op == '+') {
+            res = value0 + value1;
+        }
+        else if (op == '-') {
+            res = value0 - value1;
+        }
+        else if (op == '*') {
+            res = value0 * value1;
+        }
+        else if (op == '/') {
+            res = value0 / value1;
+        }
+        else {
+            /* Thow exception */
+            Object[] objs = {"Unexpected operand"};
+            throw new InvalidOperand("1350", objs);
+        }
+        return res;
+    }
+
+
+    private String symbolicXor(String symbol0, String symbol1) {
         String val0 = symbol0.strip();
         String val1 = symbol1.strip();
         String value;
@@ -1151,15 +1591,12 @@ class BlockSMAR {
             value = "0";
         }
         else {
-            System.out.println(String.format("%s %s", val0.replaceAll("\\s+",""), val1.replaceAll("\\s+","")));
-            value = String.format("D%s^%s", val0.replaceAll("\\s+",""), val1.replaceAll("\\s+",""));
+            value = String.format("D(%s^%s)", val0.replaceAll("\\s+",""), val1.replaceAll("\\s+",""));
+            System.out.println("D" + value);
         }
 
         return value;
     }
-
-
-
 }
 
 
@@ -1220,7 +1657,7 @@ class LArchX86 implements HardwareArch {
         m_oprdTor = new OperandType();
     }
 
-    /* Get all kinds of registers of this platform */
+
     public String[] getAllRegisters() {
 
         if (m_AllRegs == null) {
