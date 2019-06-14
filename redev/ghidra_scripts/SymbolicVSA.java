@@ -61,7 +61,7 @@ public class SymbolicVSA extends GhidraScript {
             long fentry = f.getEntryPoint().getOffset();
 
             // Entry-point
-            if (fentry != 0x04026a6)
+            if (fentry != 0x402880)
                 continue;
 
             println("Function Entry: " + f.getEntryPoint());
@@ -227,13 +227,15 @@ class FunctionSMAR {
                 if (nBlks == nExecutedBlks) {
                     /* there is a loop */
                     System.out.println("233: There is a loop?");
+                    /* fix-me */
+                    break;
                 }
                 nExecutedBlks = nBlks;
             }
         }
         catch (Exception e) {
             /* fixe-me: ignore current function */
-            System.out.println("255: Failed to traversBlocks");
+            System.out.println("255: Failed to traversBlocks: " + e.toString());
         }
         return true;
     }
@@ -430,6 +432,7 @@ class BlockSMAR {
 
         /* Current block is already visted, no need to travers at current cycle */
         int nExcutedBlks = 1;
+        Set<CPUState> selfloop = null;
 
         m_bVisted = true;
 
@@ -445,6 +448,18 @@ class BlockSMAR {
             int cntNxt = m_nexts.size();
             for (BlockSMAR nextBlk: m_nexts) {
                 cntNxt--;
+
+                /* self-loop ?*/
+                if (nextBlk == this) {
+                    /* If there is a self-loop, copy the CPU state for next traversing cycle */
+                    if (selfloop == null) {
+                        selfloop = new HashSet<CPUState>();
+                    }
+                    CPUState s = cpuState.deepCopy();
+                    selfloop.add(s);
+
+                    continue;
+                }
 
                 if (nextBlk.m_bVisted) {
                     /* traverse the next block in next cycle */
@@ -470,6 +485,8 @@ class BlockSMAR {
 
         /* All CPUState have been consumed */
         m_curCPUState = null;
+
+        if (selfloop != null) m_CPUState = selfloop;
 
         return nExcutedBlks;
     }
