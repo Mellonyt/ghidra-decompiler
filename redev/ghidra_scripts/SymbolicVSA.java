@@ -24,6 +24,7 @@ import javax.lang.model.util.ElementScanner6;
 
 import java.lang.Math;
 import java.lang.Object;
+import java.text.DecimalFormat;
 
 import ghidra.program.model.listing.*;
 import ghidra.program.model.block.*;    //CodeBlock && CodeBlockImpl
@@ -60,8 +61,8 @@ public class SymbolicVSA extends GhidraScript {
             long fentry = f.getEntryPoint().getOffset();
 
             // Entry-point
-            if (fentry != 0x402217)
-                continue;
+            //if (fentry != 0x4023b8)
+            //    continue;
 
             println("Function Entry: " + f.getEntryPoint());
             println("Function Name: " + f.getName());
@@ -182,6 +183,7 @@ class FunctionSMAR {
 
     }
 
+    /* The invariant here is that if a new CPU state exists, then it means something has changed since the last CPU state */
     public boolean doRecording() {
         CodeBlockModel blkModel = new BasicBlockModel(m_program);
         Address addr = m_function.getEntryPoint();
@@ -290,6 +292,7 @@ class BlockSMAR {
 
 
     private final OperandType OPRDTYPE;     // Used for testing operand types
+    DecimalFormat m_digitFmt;               // Add a +/- sign before digit values
 
 
     private class UnspportInstruction extends RuntimeException {
@@ -304,7 +307,12 @@ class BlockSMAR {
             /* print some details */
             System.out.println(String.format("%s: %s has inavlid operand", lineno, instr.toString()));
             for (Object o: instr.getOpObjects(operand_index)) {
-                System.out.println(o.getClass().getName());
+                if (o instanceof String)
+                    System.out.println((String)o);
+                else if (o instanceof Character)
+                    System.out.println((Character)o);
+                else
+                    System.out.println(o.getClass().getName());
             }
         }
 
@@ -312,7 +320,12 @@ class BlockSMAR {
             /* print some details */
             System.out.println(String.format("%s: inavlid operand", lineno));
             for (Object o: objs) {
-                System.out.println(o.getClass().getName());
+                if (o instanceof String)
+                    System.out.println((String)o);
+                else if (o instanceof Character)
+                    System.out.println((Character)o);
+                else
+                    System.out.println(o.getClass().getName());
             }
         }
     }
@@ -332,6 +345,8 @@ class BlockSMAR {
 
         /* Each basic block has its own SMARTable */
         m_smarTable = new HashMap<Long, Map<String, Set<String>>>();
+
+        m_digitFmt = new DecimalFormat("+#;-#");
     }
 
 
@@ -391,7 +406,7 @@ class BlockSMAR {
     }
 
 
-    /* traverse all code-blocks recusively */
+    /* traverse all code-blocks recusively in DFS order */
     public int runControlFlowOnce() {
         /* Recording the state of the symbolic memory store at the start of the current code block */
 
@@ -400,7 +415,7 @@ class BlockSMAR {
 
         m_bVisted = true;
 
-        /* traverse all next-blocks for each CPUstate */
+        /* traverse all incoming edges into this block */
         for (Iterator<CPUState> itor = m_CPUState.iterator(); itor.hasNext();) {
             CPUState cpuState = itor.next();
             m_curCPUState = cpuState;
@@ -408,7 +423,7 @@ class BlockSMAR {
             //is (new_memacc_table != existing_access_table) set_dirty (curr_bb);
             doRecording();
 
-            /* traverse the next blocks in DFS order */
+            /* traverse all outgoing edges in this block */
             int cntNxt = m_nexts.size();
             for (BlockSMAR nextBlk: m_nexts) {
                 cntNxt--;
@@ -476,6 +491,9 @@ class BlockSMAR {
                 else if (nOprand == 2)  {
                     _doRecording2(inst);
                 }
+                else if (nOprand == 3)  {
+                    _doRecording3(inst);
+                }
                 else {
                     /* Throw exception */
                     throw new UnspportInstruction("483: %s ? oprands", inst);
@@ -496,7 +514,7 @@ class BlockSMAR {
     }
 
 
-    void _doRecording0(InstructionDB inst) {
+    private void _doRecording0(InstructionDB inst) {
         System.out.println("331: " + inst.toString());
         String op = inst.getMnemonicString();
 
@@ -553,7 +571,7 @@ class BlockSMAR {
     }
 
 
-    void _doRecording1(InstructionDB inst) {
+    private void _doRecording1(InstructionDB inst) {
         System.out.println("340: " + inst.toString());
 
         String strAddr = null;
@@ -568,6 +586,15 @@ class BlockSMAR {
 
         else if (op.equalsIgnoreCase("pop")) {
             _record1pop(inst);
+        }
+
+        else if (op.equalsIgnoreCase("div")) {
+            _record1div(inst);
+        }
+
+        else if (op.equalsIgnoreCase("nop")) {
+            /* NOP [RAX + RAX*0x1] */
+            return;
         }
 
         else if (op.equalsIgnoreCase("call")) {
@@ -649,6 +676,77 @@ class BlockSMAR {
         updateRegister(inst.getAddress().getOffset(), "RSP", strValue);
     }
 
+
+    private void _record1div(InstructionDB inst) {
+        /* DIV r/m8 */
+        String oprd = inst.getDefaultOperandRepresentation(0);
+        int oprdty = inst.getOperandType(0);
+
+        String strAddr, strValue;
+        long iVal;
+
+        Object [] objs;
+
+        if (OPRDTYPE.isRegister(oprdty)) {
+            /* sub reg, reg */
+            oprd = inst.getDefaultOperandRepresentation(0);
+            strValue = getRegValue(oprd);
+        }
+        else if (OPRDTYPE.isScalar(oprdty)){
+            /* sub rsp, 8; */
+            oprd = inst.getDefaultOperandRepresentation(0);
+            strValue = oprd;
+        }
+        else {
+            /* others */
+            objs = inst.getOpObjects(0);
+
+            strAddr = _getMemAddress(objs);
+
+            /* update memory read access */
+            updateMemoryReadAccess(inst.getAddress().getOffset(), strAddr);
+
+            /* fetch the value from the memory elememt */
+            strValue = getMemValue(strAddr);
+        }
+
+        String strDx, strAx, strQue, strRem;
+        long iDx, iAx, iQue, iRem;
+
+        strDx = getRegValue("RDX");
+        strAx = getRegValue("RAX");
+
+        if (isPureSymbolic(strDx) || isPureSymbolic(strAx)) {
+            strDx = strDx.replaceAll("\\s+","");
+            strAx = strAx.replaceAll("\\s+","");
+
+            strQue = String.format("D(%s:%s/%s)", strDx, strAx, strValue);
+            strRem = String.format("D(%s:%s%%%s)", strDx, strAx, strValue);
+        }
+        else {
+            iDx = Long.decode(strDx);
+            iAx = Long.decode(strAx);
+            if (isPureSymbolic(strValue)) {
+                strDx = strDx.replaceAll("\\s+","");
+                strAx = strAx.replaceAll("\\s+","");
+
+                strQue = String.format("D(%s:%s/%s)", strDx, strAx, strValue);
+                strRem = String.format("D(%s:%s%%%s)", strDx, strAx, strValue);
+            }
+            else {
+                iQue = (iDx * iAx) / Long.decode(strValue);
+                iRem = (iDx * iAx) % Long.decode(strValue);
+                strQue = String.valueOf(iQue);
+                strRem = String.valueOf(iRem);
+            }
+        }
+
+        /* upate register status */
+        updateRegister(inst.getAddress().getOffset(), "RAX", strQue);
+        updateRegister(inst.getAddress().getOffset(), "RDX", strRem);
+    }
+
+
     private void _record1retn(InstructionDB inst) {
         String strValue,  strValSP, oprd;
 
@@ -660,7 +758,7 @@ class BlockSMAR {
         updateRegister(inst.getAddress().getOffset(), "RSP", strValue);
     }
 
-    void _doRecording2(InstructionDB inst) {
+    private void _doRecording2(InstructionDB inst) {
         System.out.println("414: " + inst.toString());
 
         String op = inst.getMnemonicString();
@@ -686,6 +784,16 @@ class BlockSMAR {
             _record2mov(inst);
         }
 
+        else if (op.equalsIgnoreCase("movsx")) {
+            /* MOVSX r, r/m */
+            _record2mov(inst);
+        }
+
+        else if (op.equalsIgnoreCase("movsxd")) {
+            /* movsxd r, r/m */
+            _record2mov(inst);
+        }
+
         else if (op.equalsIgnoreCase("lea")) {
             _record2lea(inst);
         }
@@ -696,6 +804,18 @@ class BlockSMAR {
 
         else if (op.equalsIgnoreCase("test")) {
             _record2test(inst);
+        }
+
+        else if (op.equalsIgnoreCase("cmp")) {
+            _record2test(inst);
+        }
+
+        else if (op.equalsIgnoreCase("shl")) {
+            _record2shl(inst);
+        }
+
+        else if (op.equalsIgnoreCase("shr")) {
+            _record2shr(inst);
         }
 
         else {
@@ -1017,6 +1137,130 @@ class BlockSMAR {
         }
     }
 
+    private void _record2shl(InstructionDB inst) {
+        /* shl rax, 0x4 */
+
+        int oprd0ty = inst.getOperandType(0);
+        int oprd1ty = inst.getOperandType(1);
+
+        String strVal0, strVal1, strAddr0, strAddr1;
+        String strValue, strAddress;
+        String oprd0, oprd1;
+        long iVal0, iVal1;
+
+        Object[] objs;
+
+        /* test oprand 0 */
+        if (OPRDTYPE.isRegister(oprd0ty) && OPRDTYPE.isScalar(oprd1ty)) {
+            oprd0 = inst.getDefaultOperandRepresentation(0);
+            oprd1 = inst.getDefaultOperandRepresentation(1);
+
+            strVal0 = getRegValue(oprd0);
+            iVal1 = Long.decode(oprd1);
+            iVal1 = (long)Math.pow(2, iVal1);
+
+            strValue = symbolicMul(strVal0, iVal1);
+
+            /* upate register status */
+            updateRegister(inst.getAddress().getOffset(), oprd0, strValue);
+        }
+        else {
+            throw new InvalidOperand("1061", inst, 0);
+        }
+    }
+
+    private void _record2shr(InstructionDB inst) {
+        /* shr rax, 0x4 */
+        int oprd0ty = inst.getOperandType(0);
+        int oprd1ty = inst.getOperandType(1);
+
+        String strVal0, strVal1, strAddr0, strAddr1;
+        String strValue, strAddress;
+        String oprd0, oprd1;
+        long iVal0, iVal1;
+
+        Object[] objs;
+
+        /* test oprand 0 */
+        if (OPRDTYPE.isRegister(oprd0ty) && OPRDTYPE.isScalar(oprd1ty)) {
+            oprd0 = inst.getDefaultOperandRepresentation(0);
+            oprd1 = inst.getDefaultOperandRepresentation(1);
+
+            strVal0 = getRegValue(oprd0);
+            iVal1 = Long.decode(oprd1);
+            iVal1 = (long)Math.pow(2, iVal1);
+
+            strValue = symbolicDiv(strVal0, iVal1);
+
+            /* upate register status */
+            updateRegister(inst.getAddress().getOffset(), oprd0, strValue);
+        }
+        else {
+            throw new InvalidOperand("1092", inst, 0);
+        }
+    }
+
+
+    private void _doRecording3(InstructionDB inst) {
+        System.out.println("1035: " + inst.toString());
+
+        String op = inst.getMnemonicString();
+
+        if (op.equalsIgnoreCase("imul")) {
+            /* sub reg, reg; sub reg, 0x1234; sub reg, mem; sub mem, reg; sub mem, 0x1234 */
+            _record3imul(inst);
+        }
+        else {
+            throw new UnspportInstruction("1044: 3 oprands", inst);
+        }
+    }
+
+
+    private void _record3imul(InstructionDB inst) {
+        /* IMUL r16,r/m16,imm16 */
+        int oprd0ty = inst.getOperandType(0);
+        int oprd1ty = inst.getOperandType(1);
+        int oprd2ty = inst.getOperandType(2);
+
+        String strVal0, strVal1, strVal2, strAddr0, strAddr1, strAddr2;
+        String strValue, strAddress;
+        String oprd0, oprd1, oprd2;
+        long iVal0, iVal1, iVal2;
+
+        Object[] objs;
+
+        /* test oprand 0 */
+        assert(OPRDTYPE.isRegister(oprd0ty) && OPRDTYPE.isScalar(oprd2ty));
+
+        if (OPRDTYPE.isRegister(oprd1ty)) {
+            oprd1 = inst.getDefaultOperandRepresentation(1);
+
+            strVal1 = getRegValue(oprd1);
+        }
+        else if (OPRDTYPE.isScalar(oprd1ty)){
+            throw new InvalidOperand("1069", inst, 1);
+        }
+        else {
+            /* memory oprand */
+            objs = inst.getOpObjects(1);
+            strAddr1 = _getMemAddress(objs);
+
+            /* update memory read access */
+            updateMemoryReadAccess(inst.getAddress().getOffset(), strAddr1);
+
+            /* fetch the value from the memory elememt */
+            strVal1 = getMemValue(strAddr1);
+        }
+
+        oprd2 = inst.getDefaultOperandRepresentation(2);
+        iVal2 = Long.decode(oprd2);
+        strValue = symbolicMul(strVal1, iVal2);
+
+        /* upate register status */
+        oprd0 = inst.getDefaultOperandRepresentation(0);
+        updateRegister(inst.getAddress().getOffset(), oprd0, strValue);
+    }
+
 
     private String _getMemAddress(Object[] objs_of_MemOperand) {
         /* A memory oprand from Ghidra, consits with an array of objects */
@@ -1076,7 +1320,6 @@ class BlockSMAR {
 
             return strAddress;
         }
-
         else if (objs.length == 3) {
             /* Registet + Register * Scaler: [RDX + RAX*0x1] */
             if ((objs[0] instanceof Register) && (objs[1] instanceof Register) && (objs[2] instanceof Scalar)) {
@@ -1098,15 +1341,12 @@ class BlockSMAR {
                 return strAddress;
             }
             else {
-                throw new InvalidOperand("1019", objs_of_MemOperand);
+                throw new InvalidOperand("1319", objs_of_MemOperand);
             }
-
-
         }
-
         else {
             /* This operand is invalid, throw exeception */
-            throw new InvalidOperand("1030", objs_of_MemOperand);
+            throw new InvalidOperand("1330", objs_of_MemOperand);
         }
     }
 
@@ -1176,9 +1416,8 @@ class BlockSMAR {
 
         value = m_curCPUState.mems.get(address);
         if (value == null) {
+            /* This memory element is not yet been accessed, so creat a symbolic value */
 
-
-            /* Creat a symbolic value at the current address */
             if (address.indexOf(' ') != -1) {
                 symbol = String.format("V(%s)", address.replaceAll("\\s+",""));
             }
@@ -1222,6 +1461,16 @@ class BlockSMAR {
     }
 
 
+    private String symbolicMul(String symbol0, String symbol1) {
+        return _symbolicBinaryOP(symbol0, '*', symbol1);
+    }
+
+
+    private String symbolicDiv(String symbol0, String symbol1) {
+        return _symbolicBinaryOP(symbol0, '/', symbol1);
+    }
+
+
     private String _symbolicBinaryOP(String symbol0, char op, String symbol1) {
         /* parse the symbolic value symbol0 */
         String[] elems0 = symbol0.split("\\s", 0);
@@ -1245,7 +1494,7 @@ class BlockSMAR {
         else {
             /* Throw exception */
             Object[] objs = {symbol0};
-            throw new InvalidOperand("1248", objs);
+            throw new InvalidOperand("1448", objs);
         }
 
         /* parse the symbolic value symbol1 */
@@ -1270,7 +1519,7 @@ class BlockSMAR {
         else {
             /* Throw exception */
             Object[] objs = {symbol1};
-            throw new InvalidOperand("1278", objs);
+            throw new InvalidOperand("1578", objs);
         }
 
         /* calculate the result */
@@ -1316,13 +1565,13 @@ class BlockSMAR {
                 newSymbol = binaryOP("", '+', tmpV);
             }
             else {
-                newSymbol = String.format("D(%s%d/%s%d)", part0S, part0V, part1S, part1V);
+                newSymbol = String.format("D(%s%s/%s%s)", part0S, m_digitFmt.format(part0V), part1S, m_digitFmt.format((part1V)));
             }
         }
         else {
             /* Thow exception */
             Object[] objs = {"Unexpected operand"};
-            throw new InvalidOperand("1350", objs);
+            throw new InvalidOperand("1559", objs);
         }
 
         return newSymbol;
@@ -1345,7 +1594,7 @@ class BlockSMAR {
 
 
     private String symbolicDiv(String symbol, long value) {
-        return _symbolicBinaryOP(symbol, '*', value);
+        return _symbolicBinaryOP(symbol, '/', value);
     }
 
 
@@ -1374,7 +1623,7 @@ class BlockSMAR {
             /* Throw exception */
             String exp = String.format("%s %c 0x%x", symbol, op, value);
             Object[] objs = {exp};
-            throw new InvalidOperand("1338", objs);
+            throw new InvalidOperand("1611", objs);
         }
 
         String newSymbol;
@@ -1392,22 +1641,28 @@ class BlockSMAR {
                 newValue = binaryOP(partV, op, value);
                 newSymbol = binaryOP(partS, '+', newValue);
             }
-            if (op == '*' || op == '/') {
+            else if (op == '*' || op == '/') {
                 newValue = binaryOP(partV, op, value);
                 newSymbol = binaryOP(partS, op, value);
                 newSymbol = binaryOP(newSymbol, '+', newValue);
             }
             else {
                 /* Thow exception */
-                Object[] objs = {"Unexpected operand"};
-                throw new InvalidOperand("1509", objs);
+                Object[] objs = {"Unexpected operand", symbol, op};
+                throw new InvalidOperand("1637", objs);
             }
         }
 
         return newSymbol;
     }
 
-    /* Pure symbolic value: [V|D]xxx | 0 | _ */
+
+    private Boolean isPureSymbolic(String symbol) {
+        /* Pure symbolic value: [V|D]xxx | 0 | _ */
+        return ((symbol == "") || (symbol.charAt(0) == 'V') || (symbol.charAt(0) == 'D'));
+    }
+
+
     /* generate new symbolic value */
     private String binaryOP(String pure_symbol0, char op, String pure_symbol1) {
         assert(pure_symbol0 == "" || pure_symbol0 == "0" || pure_symbol0.charAt(0) == 'V' || pure_symbol0.charAt(0) == 'D');
@@ -1469,7 +1724,7 @@ class BlockSMAR {
         }
         else {
             Object[] objs = {"Unexpected operation"};
-            throw new InvalidOperand("1611", objs);
+            throw new InvalidOperand("1711", objs);
         }
 
         return newSymbol;
@@ -1478,6 +1733,9 @@ class BlockSMAR {
 
     /* generate new symbolic value */
     private String binaryOP(String pure_symbol, char op, long value) {
+        /* Binary operation for one pure-symbolic value and one long value:
+         * VRSP + 0x8; VRSP - 0x8; VRSP * 0x8; VRSP / 0x8;
+         */
         assert(pure_symbol == "" || pure_symbol == "0" || pure_symbol.charAt(0) == 'V' || pure_symbol.charAt(0) == 'D');
 
         String newSymbol;
@@ -1503,7 +1761,7 @@ class BlockSMAR {
                 throw new InvalidOperand("1560", objs);
             }
 
-            newSymbol = String.format("%d", newValue);
+            newSymbol = String.format("%s", m_digitFmt.format(newValue));
         }
         else if (value == 0) {
             if (op == '+') {
@@ -1523,11 +1781,11 @@ class BlockSMAR {
         else {
             if (op == '+') {
                 newValue = value;
-                newSymbol = String.format("%s %d", pure_symbol, newValue);
+                newSymbol = String.format("%s %s", pure_symbol, m_digitFmt.format(newValue));
             }
             else if (op == '-')  {
                 newValue = 0 - value;
-                newSymbol = String.format("%s %d", pure_symbol, newValue);
+                newSymbol = String.format("%s %s", pure_symbol, m_digitFmt.format(newValue));
             }
             else if (op == '*')  {
                 newValue = value;
@@ -1536,7 +1794,7 @@ class BlockSMAR {
                     newSymbol = pure_symbol;
                 }
                 else {
-                    newSymbol = String.format("D(%s*%d)", pure_symbol, newValue);
+                    newSymbol = String.format("D(%s*%s)", pure_symbol, m_digitFmt.format(newValue));
                 }
             }
             else if (op == '/')  {
@@ -1546,19 +1804,24 @@ class BlockSMAR {
                     newSymbol = pure_symbol;
                 }
                 else {
-                    newSymbol = String.format("D(%s/%d)", pure_symbol, newValue);
+                    newSymbol = String.format("D(%s/%s)", pure_symbol, m_digitFmt.format(newValue));
                 }
             }
             else {
                 Object[] objs = {"Unexpected operation"};
-                throw new InvalidOperand("1611", objs);
+                throw new InvalidOperand("1799", objs);
             }
         }
 
         return newSymbol;
     }
 
+
+
     private long binaryOP(long value0, char op, long value1) {
+        /* Binary operation for two long values:
+         * 0x12 + 0x34; 0x12 - 0x34; 0x12 * 0x34; 0x12 / 0x34;
+         */
         long res;
 
         if (op == '+') {
