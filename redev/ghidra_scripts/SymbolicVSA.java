@@ -61,8 +61,8 @@ public class SymbolicVSA extends GhidraScript {
             long fentry = f.getEntryPoint().getOffset();
 
             // Entry-point
-            //if (fentry != 0x4023b8)
-            //    continue;
+            if (fentry != 0x04026a6)
+                continue;
 
             println("Function Entry: " + f.getEntryPoint());
             println("Function Name: " + f.getName());
@@ -286,6 +286,28 @@ class BlockSMAR {
     private class CPUState {
         Map<String, String> regs;
         Map<String, String> mems;
+
+
+        public CPUState deepCopy() {
+                /* Create a new instance of CPUState */
+                CPUState s = new CPUState();
+    
+                s.regs = deepCopyMAP(regs);
+                s.mems = deepCopyMAP(mems);
+
+                return s;
+        }
+
+        private Map<String, String> deepCopyMAP(Map<String, String> from) {
+            Map<String, String> to = new HashMap<String, String>();
+
+            for(Map.Entry<String,String> e : from.entrySet()) {
+                String k = new String(e.getKey());
+                String v = new String(e.getValue());
+                to.put(k, v);
+            }
+            return to;
+        }
     }
     private Set<CPUState> m_CPUState;
     private CPUState m_curCPUState;
@@ -386,7 +408,6 @@ class BlockSMAR {
         s.mems = memory_status;
     }
 
-
     private void setCPUState(CPUState state, Boolean reuse) {
         if (m_CPUState == null) {
             m_CPUState = new HashSet<CPUState>();
@@ -397,10 +418,7 @@ class BlockSMAR {
         }
         else {
             /* Create a new instance of CPUState */
-            CPUState s = new CPUState();
-
-            s.regs = (Map<String, String>)((HashMap<String, String>)state.regs).clone();
-            s.mems = (Map<String, String>)((HashMap<String, String>)state.mems).clone();
+            CPUState s = state.deepCopy();
             m_CPUState.add(s);
         }
     }
@@ -435,7 +453,7 @@ class BlockSMAR {
                 }
 
                 /* fork register status if needs */
-                if (cntNxt > 1) {
+                if (cntNxt > 0) {
                     nextBlk.setCPUState(cpuState, false);
                 }
                 else {
