@@ -33,6 +33,7 @@ import ghidra.program.model.lang.OperandType;
 import ghidra.program.model.lang.Register;
 import ghidra.program.model.scalar.Scalar;
 
+import ghidra.program.model.mem.*;
 
 import ghidra.program.database.*;
 import ghidra.program.database.function.*;
@@ -53,16 +54,52 @@ public class SymbolicVSA extends GhidraScript {
         program = state.getCurrentProgram();
         listing = program.getListing();
 
+        MemoryBlock[] blocks = program.getMemory().getBlocks();
+        Address start, end;
+        long startVM = 1, endVM = 0;    // startVM = (unsigned long) -1
+
+        for (MemoryBlock blk: blocks) {
+            /* An ELF file always has several code sections. If yes, we assume they are layed continuously */
+            if (!(blk.isExecute() && blk.isInitialized() && blk.isLoaded())) continue;
+
+            start = blk.getStart();
+            end = blk.getEnd();
+
+            if (startVM > endVM) {  // This means we find the first code section
+                startVM = start.getOffset();
+                endVM = end.getOffset();
+                continue;
+            }
+
+
+            /* considering code alignment, default to 16 bytes */
+            if (endVM < end.getOffset() && start.getOffset() <= (endVM + 15 >> 4 << 4)) {
+                endVM = end.getOffset();
+            }
+            else {
+                println(String.format("87: Find a non-continuous section: %s: 0x%x - 0x%x", blk.getName(), start.getOffset(), end.getOffset()));
+            }
+        }
+
+        println(String.format("87: code segment: 0x%x - 0x%x", startVM, endVM));
+
+        /* travese all functions */
         FunctionIterator iter = listing.getFunctions(true);
         FunctionSMAR smar;
         while (iter.hasNext() && !monitor.isCancelled()) {
             Function f = iter.next();
             String fname = f.getName();
-            long fentry = f.getEntryPoint().getOffset();
+            Address f_startVM, f_endVM;
+
+            f_startVM = f.getBody().getMinAddress();
+            f_endVM = f.getBody().getMaxAddress();
+
+            /* skip all functions out the address space of current segment */
+            if (f_startVM.getOffset() < startVM ||  f_endVM.getOffset() > endVM) continue;
 
             // Entry-point
-            if (fentry != 0x402880)
-                continue;
+            //if (fentry != 0x402880)
+            //    continue;
 
             println("Function Entry: " + f.getEntryPoint());
             println("Function Name: " + f.getName());
@@ -205,14 +242,13 @@ class FunctionSMAR {
             InitMachineStatus();
 
             // Should be a loop, if any symbolic state for any block has changed in the last round
-            int nExecutedBlks = 0;
-
             while (true) {
                 /* Test if there are blocks have CPUstate to run? */
                 smarBlk = null;
                 for (BlockSMAR blk: m_blocks.values()) {
                     int nState = blk.getNumOfCPUState();
-                    if (nState > 0) {
+                    boolean dirty = blk.isDirty();
+                    if (nState > 0 && dirty) {
                         smarBlk = blk;
                         break;
                     }
@@ -221,16 +257,9 @@ class FunctionSMAR {
                 if (smarBlk == null)  break;
 
                 /* smarBlk != null */
-                System.out.println("210: Start traversing");
-
-                int nBlks = traverseBlocksOnce(smarBlk);
-                if (nBlks == nExecutedBlks) {
-                    /* there is a loop */
-                    System.out.println("233: There is a loop?");
-                    /* fix-me */
-                    break;
-                }
-                nExecutedBlks = nBlks;
+                System.out.println("210: Start round traversing");
+                traverseBlocksOnce(smarBlk);
+                System.out.println("210: End round traversing");
             }
         }
         catch (Exception e) {
@@ -279,10 +308,132 @@ class BlockSMAR {
     private CodeBlock m_block;          // Ghidra's basic block
 
     private Set<BlockSMAR> m_nexts;     // A set of successors
-    public Boolean m_bVisted;           // Visted in current cycle
+    public boolean m_bVisted;           // Visted in current cycle
+
+    public boolean m_dirtySMART;        // The SMRT table is diry, means current block needs a new round of recording if also have CPUState
+
+    /* SMARTable, for internal use */
+    private class SMARTable {
+        private static final String VINF = "VINF";
+
+        HashMap<Long, Map<String, Set<String>>> tbl;
+
+        SMARTable() {
+            tbl = new HashMap<Long, Map<String, Set<String>>>();
+        }
+
+        void put(Long key, Map<String, Set<String>> value) {
+            tbl.put(key, value);
+        }
+
+        Map<String, Set<String>> get(Long key) {
+            return tbl.get(key);
+        }
+
+        void clear() {
+            tbl.clear();
+        }
+
+
+        void widenVS(Set<String> all, Set<String> e ) {
+            /* Already widened to VINF */
+            if (all.contains(VINF)) return;
+
+            all.addAll(e);
+            /* do widening if it has more than 3 values */
+            if (all.size() > 3) {
+                String vs[] = all.toArray(new String[all.size()]);
+                String pt[] = new String[vs.length - 1];
+
+                for (int i = 1; i < vs.length; i++) {
+                    pt[i-1] = symbolicSub(vs[i], vs[i-1]);
+                }
+
+                /* Equal difference series ? */
+
+
+                boolean bSame = true;
+                for (int i = 1; bSame && (i < pt.length); i++) {
+                    bSame = (pt[i].equals(pt[i-1]));
+                }
+
+                /* Widening */
+                if (bSame) {
+                    System.out.println("335: add VINF");
+                    all.add(new String(VINF));
+                }
+            }
+        }
+
+
+        boolean containVS(Set<String> all, Set<String> e ) {
+            if (all.containsAll(e)) {
+                return true;
+            }
+            else if (all.contains(VINF)) {
+                return true;
+            }
+            else {
+                return false;
+            }
+        }
+
+
+        boolean containsAll(SMARTable from) {
+            if (tbl.entrySet().containsAll(from.tbl.entrySet())) return true;
+
+            /* test if is widened? */
+            boolean bContain;
+            Map<Long, Map<String, Set<String>>> fromLineTbl = from.tbl;
+            for(Map.Entry<Long, Map<String, Set<String>>> e : fromLineTbl.entrySet()) {
+                Long lineno = e.getKey();
+                Map<String, Set<String>> smart = tbl.get(lineno);
+                if (smart == null) return false;
+
+                /* Test if all values exist */
+                Map<String, Set<String>> fromVStbl = e.getValue();
+                for (Map.Entry<String, Set<String>> ee: fromVStbl.entrySet()) {
+                    String addr = ee.getKey();
+                    Set<String> vs = smart.get(addr);
+                    if (vs == null) continue;   // This instruction may access another element of an array: mov [rbp + rax], 0x10
+
+                    bContain = containVS(vs, ee.getValue());
+
+                    if (! bContain) return false;
+                }
+            }
+            return true;
+        }
+
+        void putAll(SMARTable from) {
+            Map<Long, Map<String, Set<String>>> fromLineTbl = from.tbl;
+            for(Map.Entry<Long, Map<String, Set<String>>> e : fromLineTbl.entrySet()) {
+                Long lineno = e.getKey();
+                Map<String, Set<String>> smart = tbl.get(lineno);
+                if (smart == null) {
+                    tbl.put(lineno, e.getValue());
+                    continue;
+                }
+
+                /* Test if all values exist */
+                Map<String, Set<String>> fromVStbl = e.getValue();
+                for (Map.Entry<String, Set<String>> ee: fromVStbl.entrySet()) {
+                    String addr = ee.getKey();
+                    Set<String> vs = smart.get(addr);
+                    if (vs == null) {
+                        smart.put(addr, ee.getValue());
+                    }
+                    else {
+                        widenVS(vs, ee.getValue());
+                    }
+                }
+            }
+        }
+    }
 
     /* Each basic block has its own SMARTable, used for storing memory access record*/
-    Map<Long, Map<String, Set<String>>> m_smarTable;
+    SMARTable m_smarTable;
+    SMARTable m_cycSMART;   // An SMARTable for traversing;
 
     /* CPU state */
     private class CPUState {
@@ -290,17 +441,17 @@ class BlockSMAR {
         Map<String, String> mems;
 
 
-        public CPUState deepCopy() {
-                /* Create a new instance of CPUState */
-                CPUState s = new CPUState();
-    
-                s.regs = deepCopyMAP(regs);
-                s.mems = deepCopyMAP(mems);
+        CPUState deepCopy() {
+            /* Create a new instance of CPUState */
+            CPUState s = new CPUState();
 
-                return s;
+            s.regs = deepCopyMAP(regs);
+            s.mems = deepCopyMAP(mems);
+
+            return s;
         }
 
-        private Map<String, String> deepCopyMAP(Map<String, String> from) {
+        Map<String, String> deepCopyMAP(Map<String, String> from) {
             Map<String, String> to = new HashMap<String, String>();
 
             for(Map.Entry<String,String> e : from.entrySet()) {
@@ -311,6 +462,8 @@ class BlockSMAR {
             return to;
         }
     }
+
+
     private Set<CPUState> m_CPUState;
     private CPUState m_curCPUState;
 
@@ -368,7 +521,8 @@ class BlockSMAR {
         OPRDTYPE = m_arch.getOprdTester();
 
         /* Each basic block has its own SMARTable */
-        m_smarTable = new HashMap<Long, Map<String, Set<String>>>();
+        m_smarTable = new SMARTable();
+        m_dirtySMART = true;    // Set it do dirty at the first time
 
         m_digitFmt = new DecimalFormat("+#;-#");
     }
@@ -380,9 +534,12 @@ class BlockSMAR {
 
 
     public Map<Long, Map<String, Set<String>>> getSMARTable() {
-        return m_smarTable;
+        return m_smarTable.tbl;
     }
 
+    boolean isDirty() {
+        return m_dirtySMART;
+    }
 
     public int getNumOfCPUState() {
         if (m_CPUState == null)
@@ -410,7 +567,7 @@ class BlockSMAR {
         s.mems = memory_status;
     }
 
-    private void setCPUState(CPUState state, Boolean reuse) {
+    private void setCPUState(CPUState state, boolean reuse) {
         if (m_CPUState == null) {
             m_CPUState = new HashSet<CPUState>();
         }
@@ -512,6 +669,9 @@ class BlockSMAR {
         AddressSet addrSet = m_block.intersect(m_function.getBody());
         InstructionIterator iiter = m_listDB.getInstructions(addrSet, true);
 
+        if (m_cycSMART == null) m_cycSMART = new SMARTable();
+        m_cycSMART.clear();
+
         while (iiter.hasNext()) {
             InstructionDB inst = (InstructionDB)iiter.next();
             int nOprand = inst.getNumOperands();
@@ -545,6 +705,15 @@ class BlockSMAR {
                     System.out.println(String.format("485: %s err: %s", inst.toString(), e.toString()));
                 }
             }
+        }
+        if (m_smarTable.containsAll(m_cycSMART)) {
+            System.out.println("593: YES");
+            m_dirtySMART = false;
+        }
+        else {
+            m_smarTable.putAll(m_cycSMART);
+            m_dirtySMART = true;
+            System.out.println("598: False");
         }
     }
 
@@ -1390,10 +1559,10 @@ class BlockSMAR {
         Set<String> tmpSet;
 
         /* Update SMAR-table for Register reg */
-        tmpMap = m_smarTable.get(line_no);
+        tmpMap = m_cycSMART.get(line_no);
         if (tmpMap == null) {
             tmpMap = new HashMap<String, Set<String>>();
-            m_smarTable.put(line_no, tmpMap);
+            m_cycSMART.put(line_no, tmpMap);
         }
 
         reg = m_arch.getRegisterFullname(reg);
@@ -1420,10 +1589,10 @@ class BlockSMAR {
         Set<String> tmpSet;
 
         /* Update MAR-table for address */
-        tmpMap = m_smarTable.get(line_no);
+        tmpMap = m_cycSMART.get(line_no);
         if (tmpMap == null) {
             tmpMap = new HashMap<String, Set<String>>();
-            m_smarTable.put(line_no, tmpMap);
+            m_cycSMART.put(line_no, tmpMap);
         }
 
         tmpSet = tmpMap.get(address);
@@ -1468,10 +1637,10 @@ class BlockSMAR {
         }
 
         /* Update MAR-table for memory read */
-        tmpMap = m_smarTable.get(line_no);
+        tmpMap = m_cycSMART.get(line_no);
         if (tmpMap == null) {
             tmpMap = new HashMap<String, Set<String>>();
-            m_smarTable.put(line_no, tmpMap);
+            m_cycSMART.put(line_no, tmpMap);
         }
 
         tmpSet = tmpMap.get(address);
@@ -1692,7 +1861,7 @@ class BlockSMAR {
     }
 
 
-    private Boolean isPureSymbolic(String symbol) {
+    private boolean isPureSymbolic(String symbol) {
         /* Pure symbolic value: [V|D]xxx | 0 | _ */
         return ((symbol == "") || (symbol.charAt(0) == 'V') || (symbol.charAt(0) == 'D'));
     }
