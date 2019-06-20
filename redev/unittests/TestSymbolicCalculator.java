@@ -1,12 +1,12 @@
 
 import symbolicVSA.*;
 
-class TestClass {
+private class TestClass {
 
     private SymbolicCalculator calc;
 
     TestClass() {
-        calc = new SymbolicCalculator();
+        calc = SymbolicCalculator.getCalculator();
     }
 
     public void doTest() {

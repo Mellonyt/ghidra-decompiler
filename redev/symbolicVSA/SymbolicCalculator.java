@@ -35,36 +35,47 @@ class InvalidSymboicOP extends VSAException {
 
 /**
  * Encapsulate calculatoin for symbolic values
+ * Singleton mode
  */
 public class SymbolicCalculator {
+    
+    private static SymbolicCalculator m_calc = null;    // Singleton mode
+    
     final DecimalFormat m_digitFmt; // Add a +/- sign before digit values
 
-    public SymbolicCalculator() {
+    private SymbolicCalculator() {
         m_digitFmt = new DecimalFormat("+#;-#");
     }
 
+    public static SymbolicCalculator getCalculator() {
+        if (m_calc == null) {
+            m_calc = new SymbolicCalculator();
+        }
+        return m_calc;
+    }
+
     public String symbolicAdd(String symbol0, String symbol1) {
-        assert (_isSymbolicValue(symbol0) && _isSymbolicValue(symbol1));
+        assert (isSymbolicValue(symbol0) && isSymbolicValue(symbol1));
         return symbolicBinaryOP(symbol0, '+', symbol1);
     }
 
     public String symbolicSub(String symbol0, String symbol1) {
-        assert (_isSymbolicValue(symbol0) && _isSymbolicValue(symbol1));
+        assert (isSymbolicValue(symbol0) && isSymbolicValue(symbol1));
         return symbolicBinaryOP(symbol0, '-', symbol1);
     }
 
     public String symbolicMul(String symbol0, String symbol1) {
-        assert (_isSymbolicValue(symbol0) && _isSymbolicValue(symbol1));
+        assert (isSymbolicValue(symbol0) && isSymbolicValue(symbol1));
         return symbolicBinaryOP(symbol0, '*', symbol1);
     }
 
     public String symbolicDiv(String symbol0, String symbol1) {
-        assert (_isSymbolicValue(symbol0) && _isSymbolicValue(symbol1));
+        assert (isSymbolicValue(symbol0) && isSymbolicValue(symbol1));
         return symbolicBinaryOP(symbol0, '/', symbol1);
     }
 
     public String symbolicXor(String symbol0, String symbol1) {
-        assert (_isSymbolicValue(symbol0) && _isSymbolicValue(symbol1));
+        assert (isSymbolicValue(symbol0) && isSymbolicValue(symbol1));
         return symbolicBinaryOP(symbol0, '^', symbol1);
     }
 
@@ -85,10 +96,10 @@ public class SymbolicCalculator {
         long part0V; // Value part in symbol0
 
         if (elems0.length == 1) {
-            if (_isPureDigital(elems0[0])) {
+            if (isPureDigital(elems0[0])) {
                 part0S = "0";
                 part0V = Long.decode(elems0[0]);
-            } else if (_isPureSymbolic(elems0[0])) {
+            } else if (isPureSymbolic(elems0[0])) {
                 part0S = elems0[0];
                 part0V = 0;
             } else {
@@ -107,10 +118,10 @@ public class SymbolicCalculator {
         long part1V; // Value part in symbol0
 
         if (elems1.length == 1) {
-            if (_isPureDigital(elems1[0])) {
+            if (isPureDigital(elems1[0])) {
                 part1S = "0";
                 part1V = Long.decode(elems1[0]);
-            } else if (_isPureSymbolic(elems1[0])) {
+            } else if (isPureSymbolic(elems1[0])) {
                 part1S = elems1[0];
                 part1V = 0;
             } else {
@@ -210,17 +221,17 @@ public class SymbolicCalculator {
     }
 
     public String symbolicAdd(String symbol, long value) {
-        assert (_isSymbolicValue(symbol));
+        assert (isSymbolicValue(symbol));
         return symbolicBinaryOP(symbol, '+', value);
     }
 
     public String symbolicSub(String symbol, long value) {
-        assert (_isSymbolicValue(symbol));
+        assert (isSymbolicValue(symbol));
         return symbolicBinaryOP(symbol, '-', value);
     }
 
     public String symbolicMul(String symbol, long value) {
-        assert (_isSymbolicValue(symbol));
+        assert (isSymbolicValue(symbol));
         return symbolicBinaryOP(symbol, '*', value);
     }
 
@@ -240,10 +251,10 @@ public class SymbolicCalculator {
         long partV; // Numeric part of symbol
 
         if (elems.length == 1) {
-            if (_isPureDigital(elems[0])) {
+            if (isPureDigital(elems[0])) {
                 partS = "";
                 partV = Long.decode(elems[0]);
-            } else if (_isPureSymbolic(elems[0])) {
+            } else if (isPureSymbolic(elems[0])) {
                 partS = elems[0];
                 partV = 0;
             } else {
@@ -310,15 +321,15 @@ public class SymbolicCalculator {
      * @return
      */
     private String binaryOP(String pure_symbol0, char op, String pure_symbol1) {
-        assert (_isPureSymbolic(pure_symbol0));
-        assert (_isPureSymbolic(pure_symbol1));
+        assert (isPureSymbolic(pure_symbol0));
+        assert (isPureSymbolic(pure_symbol1));
 
         String newSymbol;
         long newValue;
 
-        if (_isZero(pure_symbol0))
+        if (isZero(pure_symbol0))
             pure_symbol0 = "";
-        if (_isZero(pure_symbol1))
+        if (isZero(pure_symbol1))
             pure_symbol1 = "";
 
         if (op == '+') {
@@ -390,12 +401,12 @@ public class SymbolicCalculator {
      * @return a symbolic value
      */
     private String binaryOP(String pure_symbol, char op, long value) {
-        assert (_isPureSymbolic(pure_symbol));
+        assert (isPureSymbolic(pure_symbol));
 
         String newSymbol;
         long newValue;
 
-        if (_isZero(pure_symbol))
+        if (isZero(pure_symbol))
             pure_symbol = "";
 
         if (pure_symbol.equals("")) {
@@ -495,11 +506,11 @@ public class SymbolicCalculator {
      * @param symbol
      * @return
      */
-    private boolean _isSymbolicValue(String symbol) {
+    public boolean isSymbolicValue(String symbol) {
         String[] parts = symbol.split("\\s", 0);
 
         for (String e : parts) {
-            if (!(_isPureSymbolic(e) || _isPureDigital(e))) {
+            if (!(isPureSymbolic(e) || isPureDigital(e))) {
                 return false;
             }
         }
@@ -513,14 +524,14 @@ public class SymbolicCalculator {
      * @param symbol
      * @return
      */
-    private boolean _isPureSymbolic(String symbol) {
+    public boolean isPureSymbolic(String symbol) {
         boolean yes;
         int len = symbol.length();
 
         if (symbol.length() < 1 || symbol.contains(" ")) {
             /* should no spaces */
             yes = false;
-        } else if (_isZero(symbol)) {
+        } else if (isZero(symbol)) {
             yes = true;
         } else if ((symbol.charAt(0) == 'V') || (symbol.charAt(0) == 'D')) {
             yes = (symbol.length() > 1);
@@ -540,8 +551,8 @@ public class SymbolicCalculator {
      * @param symbol
      * @return
      */
-    private boolean _isZero(String symbol) {
-        if (_isPureDigital(symbol)) {
+    public boolean isZero(String symbol) {
+        if (isPureDigital(symbol)) {
             long n = Long.decode(symbol);
             return (n == 0);
         }
@@ -554,7 +565,7 @@ public class SymbolicCalculator {
      * @param symbol
      * @return
      */
-    private boolean _isPureDigital(String symbol) {
+    public boolean isPureDigital(String symbol) {
         boolean yes = false;
         try {
             Long.decode(symbol);
