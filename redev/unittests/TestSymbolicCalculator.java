@@ -1,7 +1,7 @@
 
 import symbolicVSA.*;
 
-private class TestClass {
+class TestClass {
 
     private SymbolicCalculator calc;
 
