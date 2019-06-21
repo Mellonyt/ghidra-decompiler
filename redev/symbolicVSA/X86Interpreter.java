@@ -61,8 +61,9 @@ class InvalidOperand extends VSAException {
 }
 
 class Interpreter {
-    public void doRecording(Instruction inst) {
+    public boolean doRecording(Instruction inst) {
         System.out.println("91:" + inst.toString());
+        return true;
     }
 }
 
@@ -94,7 +95,7 @@ public class X86Interpreter extends Interpreter {
         return m_CPU;
     }
 
-    public void doRecording(MachineState state, Map<Long, Map<String, Set<String>>> table, Instruction inst) {
+    public boolean doRecording(MachineState state, Map<Long, Map<String, Set<String>>> table, Instruction inst) {
         m_MachState = state;
         m_SMART = table;
 
@@ -115,16 +116,19 @@ public class X86Interpreter extends Interpreter {
                 /* Throw exception */
                 throw new UnspportInstruction("177", inst);
             }
+            return true;
+
         } catch (Exception e) {
             String fname = e.getStackTrace()[0].getFileName();
             int line = e.getStackTrace()[0].getLineNumber();
-            
+
             System.err.println(String.format("%s:%d: %s", fname, line, e.toString()));
+            return false;
         }
     }
 
-    public void doRecording(MachineState state, SMARTable table, Instruction inst) {
-        doRecording(state, table.m_tbl, inst);
+    public boolean doRecording(MachineState state, SMARTable table, Instruction inst) {
+        return doRecording(state, table.m_tbl, inst);
     }
 
     private void _doRecording0(Instruction inst) {
@@ -237,11 +241,9 @@ public class X86Interpreter extends Interpreter {
         String oprd = inst.getDefaultOperandRepresentation(0);
         int oprdty = inst.getOperandType(0);
 
-        System.out.println(String.format("240: %s %d", oprd, oprdty));
         /* Get oprand value & upadte MAR-table */
         if (m_OPRDTYPE.isRegister(oprdty)) { // register
             strValue = m_MachState.getRegValue(oprd);
-            System.out.println(String.format("244: %s = %s", oprd, strValue));
         } else if (m_OPRDTYPE.isScalar(oprdty)) { // Constant value
             strValue = oprd;
         } else { // must be address: two memory oprand does't supported by x86 and ARM
@@ -1019,7 +1021,7 @@ public class X86Interpreter extends Interpreter {
         Set<String> tmpSet;
         String value;
 
-        value = m_MachState.getMemValue(address);        
+        value = m_MachState.getMemValue(address);
 
         /* Update MAR-table for memory read */
         tmpMap = m_SMART.get(inst_address);

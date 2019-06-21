@@ -106,7 +106,9 @@ class TestClass {
         mapVSTemp.put("0x40040", setVSTemp);
         mapSMATTemp = new HashMap<>();
         mapSMATTemp.put(0x80000L, mapVSTemp);
-        assert(table.containsAll(mapSMATTemp)); // Because of VINF       
+        assert(table.containsAll(mapSMATTemp)); // Because of VINF   
+        
+        System.out.println("Run doTest successfully");
     }
 }
 

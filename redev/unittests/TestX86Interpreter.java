@@ -4,21 +4,21 @@ import symbolicVSA.operand.*;
 class InstructionDB implements Instruction {
     private Address m_addr;
     private String m_opcode;
-    private Object[] m_objsrc;
     private Object[] m_objdst;
+    private Object[] m_objsrc;
 
-    public InstructionDB(long address, String opcode, Object[] source_oprand, Object[] dest_oprand) {
+    public InstructionDB(long address, String opcode, Object[] dst_oprand, Object[] src_oprand) {
         m_addr = new Address(address);
         m_opcode = opcode;
-        m_objsrc = source_oprand;
-        m_objdst = dest_oprand;
+        m_objdst = dst_oprand;
+        m_objsrc = src_oprand;
     }
 
     public InstructionDB(long address, String opcode, Object[] oprand) {
         m_addr = new Address(address);
         m_opcode = opcode;
-        m_objsrc = null;
         m_objdst = oprand;
+        m_objsrc = null;
     }
 
     public int getNumOperands() {
@@ -143,7 +143,6 @@ class TestClass {
 
     public void doTest() {
         MachineState state = MachineState.createInitState(inpt.getCPU());
-        System.out.println(state.toString());
         SMARTable smart = new SMARTable();
 
         /* create instruction: mov RAX, RBX */
@@ -156,26 +155,39 @@ class TestClass {
         rax = new Register("RAX");
         rbx = new Register("RBX");
 
+        assert(state.getRegValue(rax.getName()).equals("VRAX"));
+        assert(state.getRegValue(rbx.getName()).equals("VRBX"));
+
+
         oprd_rax = new Object[] {rax};
         oprd_rbx = new Object[] {rbx};
 
         inst = new InstructionDB(0x80000L, "mov", oprd_rax, oprd_rbx);
         inpt.doRecording(state, smart, inst);
+        assert(state.getRegValue(rax.getName()).equals("VRBX"));
+
 
         inst = new InstructionDB(0x40000L, "push", oprd_rax);
         inpt.doRecording(state, smart, inst);
         inst = new InstructionDB(0x40001L, "pop", oprd_rax);
         inpt.doRecording(state, smart, inst);
+        assert(state.getRegValue(rax.getName()).equals("VRBX"));
 
         inst = new InstructionDB(0x40000L, "push", oprd_rbx);
         inpt.doRecording(state, smart, inst);
         inst = new InstructionDB(0x40001L, "pop", oprd_rbx);
         inpt.doRecording(state, smart, inst);
+        assert(state.getRegValue(rbx.getName()).equals("VRBX"));
 
         inst = new InstructionDB(0x40001L, "sub", oprd_rax, oprd_rbx);
         inpt.doRecording(state, smart, inst);
-        inst = new InstructionDB(0x40001L, "add", oprd_rax, oprd_rbx);
+        assert(state.getRegValue(rax.getName()).equals("0"));
+        inst = new InstructionDB(0x40002L, "add", oprd_rax, oprd_rbx);
         inpt.doRecording(state, smart, inst);
+        assert(state.getRegValue(rax.getName()).equals("VRBX"));
+
+        /* add more test-cases */
+        System.out.println("Run doTest successfully");
     }
 }
 
