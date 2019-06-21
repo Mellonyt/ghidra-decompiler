@@ -235,6 +235,11 @@ public class SymbolicCalculator {
         return symbolicBinaryOP(symbol, '*', value);
     }
 
+    public String symbolicDiv(String symbol, long value) {
+        assert (isSymbolicValue(symbol));
+        return symbolicBinaryOP(symbol, '/', value);
+    }
+
     /**
      * Binary operation for a symbolic-value and an integer value
      *
@@ -497,6 +502,10 @@ public class SymbolicCalculator {
             throw new InvalidSymboicOP("2207", Character.toString(op));
         }
         return res;
+    }
+
+    public long symbolicBinaryOP(long value0, char op, long value1) {
+        return binaryOP(value0, op, value1);
     }
 
     /**

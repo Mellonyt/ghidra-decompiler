@@ -20,13 +20,58 @@ public class MachineState {
     }
 
     /* override me if needs */
+    public void setRegValue(String register, String value) {
+        m_regs.put(register, value);
+    }
+
+    /* override me if needs */
     public String getRegValue(String register) {
         return m_regs.get(register);
     }
 
     /* override me if needs */
+    public void setMemValue(String address, String value) {
+        m_mems.put(address, value);
+    }
+
+    /* override me if needs */
     public String getMemValue(String address) {
-        return m_mems.get(address);
+        return touchMemAddr(address);
+    }
+
+    /**
+     * Make the memory address as never untouched
+     * 
+     * @param address
+     * @return
+     */
+    public String touchMemAddr(String address) {
+        String value = m_mems.get(address);
+        if (value == null) {
+            String symbol;
+
+            if (address.indexOf(' ') != -1) {
+                symbol = String.format("V(%s)", address.replaceAll("\\s+", ""));
+            } else {
+                symbol = "V" + address;
+            }
+
+            m_mems.put(address, symbol);            
+            return symbol;
+        }
+        else {
+            return value;
+        }
+    }
+
+    /**
+     * Make the memory address as never untouched
+     * 
+     * @param address
+     * @return
+     */
+    public void untouchMemAddr(String address) {
+        m_mems.remove(address);
     }
 
     /**

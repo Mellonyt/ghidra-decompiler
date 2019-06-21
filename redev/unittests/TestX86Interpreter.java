@@ -1,25 +1,13 @@
 import symbolicVSA.*;
 
-
-// interface AddressDB implements Address {
-//     private long m_offset;
-//     Address(long address) {
-//         m_offset = address;
-//     }
-
-//     long getOffset() {
-//         return m_offset;
-//     }
-// }
-
 class InstructionDB implements Instruction {
-    private Address m_addr;
+    private TxTAddress m_addr;
     private String m_opcode;
     private Object[] m_objsrc;
     private Object[] m_objdst;
 
     public InstructionDB(long address, String opcode, Object[] source_oprand, Object[] dest_oprand) {
-        m_addr = new Address(address);
+        m_addr = new TxTAddress(address);
         m_opcode = opcode;
         m_objsrc = source_oprand;
         m_objdst = dest_oprand;
@@ -59,14 +47,14 @@ class InstructionDB implements Instruction {
         return m_opcode;
     }
 
-	public Address getAddress() {
+	public TxTAddress getAddress() {
         return m_addr;
     }
     
 }
 
 
-private class TestClass {
+class TestClass {
 
     private SymbolicCalculator calc;
 

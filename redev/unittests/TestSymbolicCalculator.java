@@ -19,55 +19,55 @@ class TestClass {
         try {
             long res;
 
-            res = calc.binaryOP(0, '+', 0);
+            res = calc.symbolicBinaryOP(0, '+', 0);
             assert (res == 0);
 
-            res = calc.binaryOP(10, '+', 0);
+            res = calc.symbolicBinaryOP(10, '+', 0);
             assert (res == 10);
 
-            res = calc.binaryOP(0, '+', 10);
+            res = calc.symbolicBinaryOP(0, '+', 10);
             assert (res == 10);
 
-            res = calc.binaryOP(10, '+', 20);
+            res = calc.symbolicBinaryOP(10, '+', 20);
             assert (res == 30);
 
-            res = calc.binaryOP(0, '-', 10);
+            res = calc.symbolicBinaryOP(0, '-', 10);
             assert (res == -10);
 
-            res = calc.binaryOP(10, '-', 0);
+            res = calc.symbolicBinaryOP(10, '-', 0);
             assert (res == 10);
 
-            res = calc.binaryOP(20, '-', 10);
+            res = calc.symbolicBinaryOP(20, '-', 10);
             assert (res == 10);
 
-            res = calc.binaryOP(10, '-', 20);
+            res = calc.symbolicBinaryOP(10, '-', 20);
             assert (res == -10);
 
-            res = calc.binaryOP(10, '*', 0);
+            res = calc.symbolicBinaryOP(10, '*', 0);
             assert (res == 0);
 
-            res = calc.binaryOP(-10, '*', 0);
+            res = calc.symbolicBinaryOP(-10, '*', 0);
             assert (res == 0);
 
-            res = calc.binaryOP(0, '*', 10);
+            res = calc.symbolicBinaryOP(0, '*', 10);
             assert (res == 0);
 
-            res = calc.binaryOP(10, '*', 10);
+            res = calc.symbolicBinaryOP(10, '*', 10);
             assert (res == 100);
 
-            res = calc.binaryOP(10, '/', 10);
+            res = calc.symbolicBinaryOP(10, '/', 10);
             assert (res == 1);
 
-            res = calc.binaryOP(100, '/', 10);
+            res = calc.symbolicBinaryOP(100, '/', 10);
             assert (res == 10);
 
-            res = calc.binaryOP(10, '/', 100);
+            res = calc.symbolicBinaryOP(10, '/', 100);
             assert (res == 0);
 
-            res = calc.binaryOP(10, '^', 10);
+            res = calc.symbolicBinaryOP(10, '^', 10);
             assert (res == 0);
 
-            res = calc.binaryOP(100, '^', 10);
+            res = calc.symbolicBinaryOP(100, '^', 10);
             assert (res != 0);
 
             System.out.println("Run TestLL successful");  
