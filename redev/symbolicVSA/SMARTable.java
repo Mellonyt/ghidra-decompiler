@@ -14,7 +14,7 @@ public class SMARTable {
     private static int WIDENVS_THRESHOLD = 3; // tigger widening
     private SymbolicCalculator m_calc;
 
-    HashMap<Long, Map<String, Set<String>>> m_tbl;
+    public Map<Long, Map<String, Set<String>>> m_tbl;
 
     public SMARTable() {
         m_calc = SymbolicCalculator.getCalculator();

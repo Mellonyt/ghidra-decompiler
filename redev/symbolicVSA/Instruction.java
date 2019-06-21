@@ -1,6 +1,6 @@
 package symbolicVSA;
 
-import symbolicVSA.*;
+import symbolicVSA.Address;
 
 public interface Instruction {
 	/**
@@ -42,7 +42,7 @@ public interface Instruction {
 	 *
 	 * @return the current address of offset 0.
 	 */
-	public TxTAddress getAddress();
+	public Address getAddress();
 
 	/**
 	 * Returns a string that represents this code unit with default markup. Only the

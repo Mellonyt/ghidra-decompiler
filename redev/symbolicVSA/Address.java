@@ -1,9 +1,9 @@
 package symbolicVSA;
 
-public class TxTAddress {
+public class Address {
     private long m_offset;
 
-    public TxTAddress(long address) {
+    public Address(long address) {
         m_offset = address;
     }
 

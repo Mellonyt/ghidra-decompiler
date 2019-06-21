@@ -212,21 +212,6 @@ class FunctionSMAR {
     }
 
 
-    /**
-     * Initialize the CPUstate before interpreting current function
-     */
-    private void InitMachineStatus() {
-        /* Set register values to symbolic initial values */
-        if (m_registers == null) m_registers = new HashMap<String, String>();        // CPU State : Registers
-        String[] allRegs = m_arch.getAllRegisters();
-
-        for (String reg: allRegs) {
-            m_registers.put(reg, "V" + reg);
-        }
-
-        /* Doesn't need to initialize memory state */
-        if (m_memories == null) m_memories = new HashMap<String, String>();         // CPU State : Memory slot
-    }
 
 
     /**

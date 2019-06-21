@@ -25,7 +25,10 @@ x86interpreter_java  	:= $(patsubst %.class,%.java,$(x86interpreter_class))
 x86interpreter_test_class	:= Test${x86interpreter}.class
 x86interpreter_test_java 	:= ${TEST_DIR}/$(patsubst %.class,%.java,$(x86interpreter_test_class))
 x86interpreter_testor		:= $(patsubst %.class,%,${x86interpreter_test_class})
-x86interpreter_dep_java		:= ${SRC_DIR}/VSAException.java ${SRC_DIR}/SymbolicCalculator.java ${SRC_DIR}/TxTAddress.java ${SRC_DIR}/Intruction.java ${SRC_DIR}/OperandType.java ${SRC_DIR}/MachineState.java
+
+dep_javafiles1	:= GenericAddress.java Register.java Scalar.java OperandType.java 
+dep_javafiles2	:= VSAException.java SymbolicCalculator.java Intruction.java MachineState.java Address.java X86Processor.java
+x86interpreter_dep_java		:= $(patsubst %,${SRC_DIR}/operand/%,${dep_javafiles1}) $(patsubst %,${SRC_DIR}/%,${dep_javafiles2}) 
 x86interpreter_dep_class	:= $(patsubst %.java,%.class,${x86interpreter_dep_java})
 
 

@@ -19,6 +19,23 @@ public class MachineState {
 
     }
 
+    public static MachineState createInitState(X86Processor cpu) {
+        MachineState s = new MachineState();
+
+        /* Set register values to symbolic initial values */
+        s.m_regs = new HashMap<>();        // CPU State : Registers
+        s.m_mems = new HashMap<>();        // CPU State : Memory slot
+
+        String[] allRegs = cpu.getAllRegisters();
+
+        for (String reg: allRegs) {
+            s.m_regs.put(reg, "V" + reg);
+        }
+
+        /* Doesn't need to initialize memory state */
+        return s;
+    }
+
     /* override me if needs */
     public void setRegValue(String register, String value) {
         m_regs.put(register, value);
@@ -103,5 +120,9 @@ public class MachineState {
             to.put(k, v);
         }
         return to;
+    }
+
+    public String toString() {
+        return String.format("%s %s", m_regs.toString(), m_mems.toString());
     }
 }

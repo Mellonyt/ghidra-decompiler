@@ -3,6 +3,7 @@ package symbolicVSA;
 import java.util.*;
 
 import symbolicVSA.*;
+import symbolicVSA.operand.*;
 
 class UnspportInstruction extends VSAException {
     private String m_lineno;
@@ -59,94 +60,6 @@ class InvalidOperand extends VSAException {
     }
 }
 
-class X86Processor {
-
-    private static final String[] m_Regs64 = { "RAX", "RBX", "RCX", "RDX", "RDI", "RSI", "RBP", "RSP", "R8", "R9",
-            "R10", "R11", "R12", "R13", "R14", "R15" };
-    private static final String[] m_Regs32 = { "EAX", "EBX", "ECX", "EDX", "EDI", "ESI", "EBP", "ESP", "R8D", "R9D",
-            "R10D", "R11D", "R12D", "R13D", "R14D", "R15D" };
-    private static final String[] m_Regs16 = { "AX", "BX", "CX", "DX", "DI", "SI", "BP", "SP" };
-    private static final String[] m_Regs8h = { "AH", "BH", "CH", "DH" };
-    private static final String[] m_Regs8l = { "AL", "BL", "CL", "DL" };
-    private static final String[] m_RegSeg = { "FS", "GS" };
-    private static final String[] m_RegXmm = { "XMM0", "XMM1", "XMM2", "XMM3", "XMM4", "XMM5", "XMM6", "XMM7" };
-
-    private static Map<String, String> m_RegMap;
-    private static String[] m_AllRegs;
-
-    private static X86Processor m_singleton = null;
-
-    private X86Processor() {
-        createRegNameMapping();
-        collectAllRegisters();
-    }
-
-    public static X86Processor getProcessor() {
-        if (m_singleton == null) {
-            m_singleton = new X86Processor();
-        }
-        return m_singleton;
-    }
-
-    /**
-     * Create name mapping for register names
-     */
-    private void createRegNameMapping() {
-        if (m_RegMap == null) {
-            m_RegMap = new HashMap<>();
-        }
-
-        int idx = 0;
-
-        for (idx = 0; idx < m_RegSeg.length; idx++) {
-            m_RegMap.put(m_RegSeg[idx], m_RegSeg[idx]);
-        }
-        for (idx = 0; idx < m_RegXmm.length; idx++) {
-            m_RegMap.put(m_RegXmm[idx], m_RegXmm[idx]);
-        }
-        for (idx = 0; idx < m_Regs64.length; idx++) {
-            m_RegMap.put(m_Regs64[idx], m_Regs64[idx]);
-        }
-        for (idx = 0; idx < m_Regs32.length; idx++) {
-            m_RegMap.put(m_Regs32[idx], m_Regs64[idx]);
-        }
-        for (idx = 0; idx < m_Regs16.length; idx++) {
-            m_RegMap.put(m_Regs16[idx], m_Regs64[idx]);
-        }
-        for (idx = 0; idx < m_Regs8h.length; idx++) {
-            m_RegMap.put(m_Regs8h[idx], m_Regs64[idx]);
-        }
-        for (idx = 0; idx < m_Regs8l.length; idx++) {
-            m_RegMap.put(m_Regs8l[idx], m_Regs64[idx]);
-        }
-    }
-
-    /**
-     * Collect all available registers
-     */
-    private void collectAllRegisters() {
-        if (m_AllRegs == null) {
-            m_AllRegs = new String[m_RegSeg.length + m_RegXmm.length + m_Regs64.length];
-        }
-
-        String[] allRegs = m_AllRegs;
-        System.arraycopy(m_RegSeg, 0, allRegs, 0, m_RegSeg.length);
-        System.arraycopy(m_RegXmm, 0, allRegs, m_RegSeg.length, m_RegXmm.length);
-        System.arraycopy(m_Regs64, 0, allRegs, m_RegSeg.length + m_RegXmm.length, m_Regs64.length);
-        m_AllRegs = allRegs;
-    }
-
-    /* get the name of whole width register */
-    public String getRegisterFullName(String register) {
-        return m_RegMap.get(register);
-    }
-
-    /* Get all available registers on this architecture */
-    public String[] getAllRegisters() {
-        return m_AllRegs;
-    }
-}
-
 class Interpreter {
     public void doRecording(Instruction inst) {
         System.out.println("91:" + inst.toString());
@@ -159,7 +72,7 @@ public class X86Interpreter extends Interpreter {
     private static OperandType m_OPRDTYPE; // Use for testing opranad types
     private static SymbolicCalculator m_SymCalc; // Used for do symbolic calculation
 
-    private HashMap<Long, Map<String, Set<String>>> m_SMART; // Memory access recording
+    private Map<Long, Map<String, Set<String>>> m_SMART; // Memory access recording
     private MachineState m_MachState; // Machine state
 
     private static X86Interpreter m_singleton = null;
@@ -177,7 +90,13 @@ public class X86Interpreter extends Interpreter {
         return m_singleton;
     }
 
-    public void doRecording(Instruction inst) {
+    public X86Processor getCPU() {
+        return m_CPU;
+    }
+
+    public void doRecording(MachineState state, Map<Long, Map<String, Set<String>>> table, Instruction inst) {
+        m_MachState = state;
+        m_SMART = table;
 
         int nOprand = inst.getNumOperands();
 
@@ -197,8 +116,15 @@ public class X86Interpreter extends Interpreter {
                 throw new UnspportInstruction("177", inst);
             }
         } catch (Exception e) {
-            System.err.println(e.toString());
+            String fname = e.getStackTrace()[0].getFileName();
+            int line = e.getStackTrace()[0].getLineNumber();
+            
+            System.err.println(String.format("%s:%d: %s", fname, line, e.toString()));
         }
+    }
+
+    public void doRecording(MachineState state, SMARTable table, Instruction inst) {
+        doRecording(state, table.m_tbl, inst);
     }
 
     private void _doRecording0(Instruction inst) {
@@ -311,9 +237,11 @@ public class X86Interpreter extends Interpreter {
         String oprd = inst.getDefaultOperandRepresentation(0);
         int oprdty = inst.getOperandType(0);
 
+        System.out.println(String.format("240: %s %d", oprd, oprdty));
         /* Get oprand value & upadte MAR-table */
         if (m_OPRDTYPE.isRegister(oprdty)) { // register
             strValue = m_MachState.getRegValue(oprd);
+            System.out.println(String.format("244: %s = %s", oprd, strValue));
         } else if (m_OPRDTYPE.isScalar(oprdty)) { // Constant value
             strValue = oprd;
         } else { // must be address: two memory oprand does't supported by x86 and ARM
