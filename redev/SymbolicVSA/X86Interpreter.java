@@ -161,7 +161,7 @@ public class X86Interpreter extends Interpreter {
         /* pop rip */
         String strValue;
         /* Update RSP register status */
-        strValue = m_MachState.getRegValue("RSP");
+        strValue = getRegisterValue("RSP");
         strValue = m_SymCalc.symbolicAdd(strValue, 8);
         updateRegisterWriteAccess(inst.getAddress(), "RSP", strValue);
     }
@@ -172,20 +172,20 @@ public class X86Interpreter extends Interpreter {
         String strValue;
 
         /* mov rsp, rbp */
-        strValBP = m_MachState.getRegValue("RBP");
+        strValBP = getRegisterValue("RBP");
         updateRegisterWriteAccess(inst.getAddress(), "RSP", strValBP);
 
         /* pop rbp */
-        strValSP = m_MachState.getRegValue("RSP");
-        strValue = m_MachState.getMemValue(strValSP);
+        strValSP = getRegisterValue("RSP");
+        strValue = getMemoryValue(strValSP);
         updateRegisterWriteAccess(inst.getAddress(), "RBP", strValue);
 
         /* Clean memory status */
-        strValSP = m_MachState.getRegValue("RSP");
+        strValSP = getRegisterValue("RSP");
         m_MachState.untouchMemAddr(strValSP);
 
         /* Update register RSP */
-        strValSP = m_MachState.getRegValue("RSP");
+        strValSP = getRegisterValue("RSP");
         strValue = m_SymCalc.symbolicAdd(strValSP, 8);
         updateRegisterWriteAccess(inst.getAddress(), "RSP", strValue);
     }
@@ -243,7 +243,7 @@ public class X86Interpreter extends Interpreter {
 
         /* Get oprand value & upadte MAR-table */
         if (m_OPRDTYPE.isRegister(oprdty)) { // register
-            strValue = m_MachState.getRegValue(oprd);
+            strValue = getRegisterValue(oprd);
         } else if (m_OPRDTYPE.isScalar(oprdty)) { // Constant value
             strValue = oprd;
         } else { // must be address: two memory oprand does't supported by x86 and ARM
@@ -251,12 +251,12 @@ public class X86Interpreter extends Interpreter {
         }
 
         /* Update MAR-table & register status */
-        strAddr = m_MachState.getRegValue("RSP");
+        strAddr = getRegisterValue("RSP");
         strAddr = m_SymCalc.symbolicSub(strAddr, 8);
         updateRegisterWriteAccess(inst.getAddress(), "RSP", strAddr);
 
         /* Update MAR-table & memory status */
-        strAddr = m_MachState.getRegValue("RSP");
+        strAddr = getRegisterValue("RSP");
         updateMemoryWriteAccess(inst.getAddress(), strAddr, strValue);
     }
 
@@ -275,20 +275,20 @@ public class X86Interpreter extends Interpreter {
          */
         assert (m_OPRDTYPE.isRegister(oprdty));
 
-        // strAddr = m_MachState.getRegValue("RSP");
+        // strAddr = getRegisterValue("RSP");
         // updateMemoryReadAccess(inst.getAddress(), strAddr);
 
         /* Get value from stack && update rigister status */
-        strValue = m_MachState.getRegValue("RSP");
-        strValue = m_MachState.getMemValue(strValue);
+        strValue = getRegisterValue("RSP");
+        strValue = getMemoryValue(strValue);
         updateRegisterWriteAccess(inst.getAddress(), oprd, strValue);
 
         /* Clean memory status */
-        strValue = m_MachState.getRegValue("RSP");
+        strValue = getRegisterValue("RSP");
         m_MachState.untouchMemAddr(strValue);
 
         /* Update RSP register status */
-        strValue = m_MachState.getRegValue("RSP");
+        strValue = getRegisterValue("RSP");
         strValue = m_SymCalc.symbolicAdd(strValue, 8);
         updateRegisterWriteAccess(inst.getAddress(), "RSP", strValue);
     }
@@ -306,7 +306,7 @@ public class X86Interpreter extends Interpreter {
         if (m_OPRDTYPE.isRegister(oprdty)) {
             /* sub reg, reg */
             oprd = inst.getDefaultOperandRepresentation(0);
-            strValue = m_MachState.getRegValue(oprd);
+            strValue = getRegisterValue(oprd);
         } else if (m_OPRDTYPE.isScalar(oprdty)) {
             /* sub rsp, 8; */
             oprd = inst.getDefaultOperandRepresentation(0);
@@ -321,14 +321,14 @@ public class X86Interpreter extends Interpreter {
             updateMemoryReadAccess(inst.getAddress(), strAddr);
 
             /* fetch the value from the memory elememt */
-            strValue = m_MachState.getMemValue(strAddr);
+            strValue = getMemoryValue(strAddr);
         }
 
         String strDx, strAx, strQue, strRem;
         long iDx, iAx, iQue, iRem;
 
-        strDx = m_MachState.getRegValue("RDX");
-        strAx = m_MachState.getRegValue("RAX");
+        strDx = getRegisterValue("RDX");
+        strAx = getRegisterValue("RAX");
 
         if (m_SymCalc.isPureSymbolic(strDx) || m_SymCalc.isPureSymbolic(strAx)) {
             strDx = strDx.replaceAll("\\s+", "");
@@ -364,7 +364,7 @@ public class X86Interpreter extends Interpreter {
         oprd = inst.getDefaultOperandRepresentation(0);
 
         /* Update RSP register status */
-        strValSP = m_MachState.getRegValue("RSP");
+        strValSP = getRegisterValue("RSP");
         strValue = m_SymCalc.symbolicAdd(strValSP, Integer.decode(oprd) + 8);
         updateRegisterWriteAccess(inst.getAddress(), "RSP", strValue);
     }
@@ -447,12 +447,12 @@ public class X86Interpreter extends Interpreter {
 
         if (m_OPRDTYPE.isRegister(oprd0ty)) {
             oprd0 = inst.getDefaultOperandRepresentation(0);
-            strVal0 = m_MachState.getRegValue(oprd0);
+            strVal0 = getRegisterValue(oprd0);
 
             if (m_OPRDTYPE.isRegister(oprd1ty)) {
                 /* sub reg, reg */
                 oprd1 = inst.getDefaultOperandRepresentation(1);
-                strVal1 = m_MachState.getRegValue(oprd1);
+                strVal1 = getRegisterValue(oprd1);
 
                 if (op == '+')
                     strValue = m_SymCalc.symbolicAdd(strVal0, strVal1);
@@ -485,7 +485,7 @@ public class X86Interpreter extends Interpreter {
                 updateMemoryReadAccess(inst.getAddress(), strAddr1);
 
                 /* fetch the value from the memory elememt */
-                strVal1 = m_MachState.getMemValue(strAddr1);
+                strVal1 = getMemoryValue(strAddr1);
 
                 if (op == '+')
                     strValue = m_SymCalc.symbolicAdd(strVal0, strVal1);
@@ -502,7 +502,7 @@ public class X86Interpreter extends Interpreter {
             /* Ghidra bug: sub [RAX],RDX -> _, ADDR|REG */
             if (m_OPRDTYPE.isRegister(oprd1ty)) {
                 oprd1 = inst.getDefaultOperandRepresentation(1);
-                strVal1 = m_MachState.getRegValue(oprd1);
+                strVal1 = getRegisterValue(oprd1);
             } else if (m_OPRDTYPE.isScalar(oprd1ty)) {
                 oprd1 = inst.getDefaultOperandRepresentation(1);
                 strVal1 = oprd1;
@@ -515,7 +515,7 @@ public class X86Interpreter extends Interpreter {
             strAddr0 = _calcMemAddress(objs);
 
             /* fetch the value from the memory elememt */
-            strVal0 = m_MachState.getMemValue(strAddr0);
+            strVal0 = getMemoryValue(strAddr0);
 
             if (op == '+')
                 strValue = m_SymCalc.symbolicAdd(strVal0, strVal1);
@@ -547,7 +547,7 @@ public class X86Interpreter extends Interpreter {
                 /* mov reg, reg */
                 oprd1 = inst.getDefaultOperandRepresentation(1);
 
-                strVal1 = m_MachState.getRegValue(oprd1);
+                strVal1 = getRegisterValue(oprd1);
                 updateRegisterWriteAccess(inst.getAddress(), oprd0, strVal1);
             } else if (m_OPRDTYPE.isScalar(oprd1ty)) {
                 /* mov rax, 8; */
@@ -564,7 +564,7 @@ public class X86Interpreter extends Interpreter {
                 updateMemoryReadAccess(inst.getAddress(), strAddr1);
 
                 /* fetch the value from the memory elememt */
-                strVal1 = m_MachState.getMemValue(strAddr1);
+                strVal1 = getMemoryValue(strAddr1);
 
                 /* upate register status */
                 updateRegisterWriteAccess(inst.getAddress(), oprd0, strVal1);
@@ -573,7 +573,7 @@ public class X86Interpreter extends Interpreter {
             /* Ghidra bug: MOV [RAX],RDX -> _, ADDR|REG */
             if (m_OPRDTYPE.isRegister(oprd1ty)) {
                 oprd1 = inst.getDefaultOperandRepresentation(1);
-                strVal1 = m_MachState.getRegValue(oprd1);
+                strVal1 = getRegisterValue(oprd1);
             } else if (m_OPRDTYPE.isScalar(oprd1ty)) {
                 oprd1 = inst.getDefaultOperandRepresentation(1);
                 strVal1 = m_SymCalc.symbolicAdd("", oprd1);
@@ -629,12 +629,12 @@ public class X86Interpreter extends Interpreter {
         /* mov reg, reg; mov reg, mem; mov reg, 0x1234; mov mem, reg; mov mem, 0x1234 */
         if (m_OPRDTYPE.isRegister(oprd0ty)) {
             oprd0 = inst.getDefaultOperandRepresentation(0);
-            strVal0 = m_MachState.getRegValue(oprd0);
+            strVal0 = getRegisterValue(oprd0);
             if (m_OPRDTYPE.isRegister(oprd1ty)) {
                 /* xor reg, reg */
                 oprd1 = inst.getDefaultOperandRepresentation(1);
 
-                strVal1 = m_MachState.getRegValue(oprd1);
+                strVal1 = getRegisterValue(oprd1);
             } else if (m_OPRDTYPE.isScalar(oprd1ty)) {
                 /* mov rax, 8; */
                 oprd1 = inst.getDefaultOperandRepresentation(1);
@@ -647,7 +647,7 @@ public class X86Interpreter extends Interpreter {
                 updateMemoryReadAccess(inst.getAddress(), strAddr1);
 
                 /* fetch the value from the memory elememt */
-                strVal1 = m_MachState.getMemValue(strAddr1);
+                strVal1 = getMemoryValue(strAddr1);
             }
 
             /* upate register status */
@@ -657,7 +657,7 @@ public class X86Interpreter extends Interpreter {
             /* Ghidra bug: MOV [RAX],RDX -> _, ADDR|REG */
             if (m_OPRDTYPE.isRegister(oprd1ty)) {
                 oprd1 = inst.getDefaultOperandRepresentation(1);
-                strVal1 = m_MachState.getRegValue(oprd1);
+                strVal1 = getRegisterValue(oprd1);
             } else if (m_OPRDTYPE.isScalar(oprd1ty)) {
                 oprd1 = inst.getDefaultOperandRepresentation(1);
                 strVal1 = oprd1;
@@ -674,7 +674,7 @@ public class X86Interpreter extends Interpreter {
             updateMemoryReadAccess(inst.getAddress(), strAddr0);
 
             /* fetch the value from the memory elememt */
-            strVal0 = m_MachState.getMemValue(strAddr0);
+            strVal0 = getMemoryValue(strAddr0);
             /* update memory write access */
             strValue = m_SymCalc.symbolicXor(strVal0, strVal1);
 
@@ -744,7 +744,7 @@ public class X86Interpreter extends Interpreter {
             oprd0 = inst.getDefaultOperandRepresentation(0);
             oprd1 = inst.getDefaultOperandRepresentation(1);
 
-            strVal0 = m_MachState.getRegValue(oprd0);
+            strVal0 = getRegisterValue(oprd0);
             iVal1 = Long.decode(oprd1);
             iVal1 = (long) Math.pow(2, iVal1);
 
@@ -774,7 +774,7 @@ public class X86Interpreter extends Interpreter {
             oprd0 = inst.getDefaultOperandRepresentation(0);
             oprd1 = inst.getDefaultOperandRepresentation(1);
 
-            strVal0 = m_MachState.getRegValue(oprd0);
+            strVal0 = getRegisterValue(oprd0);
             iVal1 = Long.decode(oprd1);
             iVal1 = (long) Math.pow(2, iVal1);
 
@@ -819,7 +819,7 @@ public class X86Interpreter extends Interpreter {
         if (m_OPRDTYPE.isRegister(oprd1ty)) {
             oprd1 = inst.getDefaultOperandRepresentation(1);
 
-            strVal1 = m_MachState.getRegValue(oprd1);
+            strVal1 = getRegisterValue(oprd1);
         } else if (m_OPRDTYPE.isScalar(oprd1ty)) {
             throw new InvalidOperand("1069", inst, 1);
         } else {
@@ -831,7 +831,7 @@ public class X86Interpreter extends Interpreter {
             updateMemoryReadAccess(inst.getAddress(), strAddr1);
 
             /* fetch the value from the memory elememt */
-            strVal1 = m_MachState.getMemValue(strAddr1);
+            strVal1 = getMemoryValue(strAddr1);
         }
 
         oprd2 = inst.getDefaultOperandRepresentation(2);
@@ -854,7 +854,7 @@ public class X86Interpreter extends Interpreter {
                 Register r = (Register) objs[0];
 
                 /* get regiser value */
-                strValue = m_MachState.getRegValue(r.getName());
+                strValue = getRegisterValue(r.getName());
                 return strValue;
             } else if (objs[0] instanceof Scalar) {
                 Scalar s = (Scalar) objs[0];
@@ -891,7 +891,7 @@ public class X86Interpreter extends Interpreter {
                 throw new InvalidOperand("1019", objs_of_MemOperand);
             }
 
-            strValue = m_MachState.getRegValue(r.getName());
+            strValue = getRegisterValue(r.getName());
             strAddress = m_SymCalc.symbolicAdd(strValue, s.getValue());
 
             return strAddress;
@@ -907,8 +907,8 @@ public class X86Interpreter extends Interpreter {
                 s = (Scalar) objs[2];
 
                 System.out.println(String.format("%s + %s*%d?", rb.getName(), ri.getName(), s.getValue()));
-                vb = m_MachState.getRegValue(rb.getName());
-                vi = m_MachState.getRegValue(ri.getName());
+                vb = getRegisterValue(rb.getName());
+                vi = getRegisterValue(ri.getName());
 
                 strValue = m_SymCalc.symbolicMul(vi, s.getValue());
                 strAddress = m_SymCalc.symbolicAdd(vb, strValue);
@@ -932,8 +932,8 @@ public class X86Interpreter extends Interpreter {
 
                 System.out.println(String.format("%s + %s*0x%x + 0x%x?", rb.getName(), ri.getName(), sc.getValue(),
                         so.getValue()));
-                vb = m_MachState.getRegValue(rb.getName());
-                vi = m_MachState.getRegValue(ri.getName());
+                vb = getRegisterValue(rb.getName());
+                vi = getRegisterValue(ri.getName());
 
                 strValue = m_SymCalc.symbolicMul(vi, sc.getValue());
                 strAddress = m_SymCalc.symbolicAdd(vb, strValue);
@@ -947,6 +947,17 @@ public class X86Interpreter extends Interpreter {
             /* This operand is invalid, throw exeception */
             throw new InvalidOperand("1579", objs_of_MemOperand);
         }
+    }
+
+    /* override me if needs */
+    private String getRegisterValue(String register) {
+        String Reg = m_CPU.getRegisterFullName(register);
+        return m_MachState.getRegValue(Reg);
+    }
+
+    /* override me if needs */
+    private String getMemoryValue(String address) {
+        return m_MachState.getMemValue(address);
     }
 
     private boolean updateRegisterWriteAccess(long inst_address, String reg, String value) {

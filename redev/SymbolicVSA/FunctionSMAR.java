@@ -102,8 +102,8 @@ public class FunctionSMAR {
                 /* pick up a block which has Machine-state to run? */
                 smarBlk = null;
                 for (ExecutionBlock blk : m_blocks.values()) {
-                    int nState = blk.getNumOfCPUState();
-                    boolean bDirty = blk.isDirty();
+                    int nState = blk.getNumOfMachState();
+                    boolean bDirty = blk.isSMRTDirty();
 
                     if (nState > 0 && bDirty) {
                         smarBlk = blk;
@@ -133,7 +133,7 @@ public class FunctionSMAR {
      */
     private boolean traverseBlocksOnce(ExecutionBlock start_block) {
         /* set all blocks un-visted */
-        for (BlockSMAR blk : m_blocks.values()) {
+        for (ExecutionBlock blk : m_blocks.values()) {
             blk.m_bVisted = false;
         }
 
@@ -142,27 +142,23 @@ public class FunctionSMAR {
     }
 
     /**
-     * Fetch SMART from each BlockSMAR.
+     * Fetch SMART from each SMARBlock.
      * 
      * @return : the SMAR-table
      */
     public Map<Long, Map<String, Set<String>>> getSMARTable() {
-        if (m_SMARTable == null) {
-            m_SMARTable = new HashMap<Long, Map<String, Set<String>>>(); // Symbolic Store
-        }
-
-        m_SMARTable.clear();
+        Map<Long, Map<String, Set<String>>> SMARTable = new HashMap<>(); // Symbolic Store
 
         /* fetch SMART from each block */
         Map<Long, Map<String, Set<String>>> smart;
 
-        for (BlockSMAR blk : m_blocks.values()) {
+        for (ExecutionBlock blk : m_blocks.values()) {
             smart = blk.getSMARTable();
 
             if (smart != null)
-                m_SMARTable.putAll(smart);
+                SMARTable.putAll(smart);
         }
-        return m_SMARTable;
+        return SMARTable;
     }
 }
 
@@ -176,24 +172,25 @@ class SMARBlock {
 
     private AddressSet m_addrSet; // The address space convering this block
 
-    public boolean m_bVisted; // Visted in current cycle
-
     public boolean m_dirtySMART; // The SMRT table is diry, means current block needs a new round of recording if
                                  // also have MachineState
+
+    X86Interpreter m_inpt;
 
     /*
      * Each basic block has its own SMARTable, used for storing memory access record
      */
     SMARTable m_smarTable;
 
-    public BlockSMAR(Listing listintDB, CodeBlock ghidra_block, AddressSet addrSet ) {
-       
+    public SMARBlock(Listing listintDB, CodeBlock ghidra_block, AddressSet addrSet) {
+
         m_listDB = listintDB;
         m_block = ghidra_block;
         m_addrSet = addrSet;
 
-        m_bVisted = false;
-        m_dirtySMART = true;    // Set it do dirty at the first time
+        m_dirtySMART = true; // Set it do dirty at the first time
+
+        m_inpt = X86Interpreter.getInterpreter();
 
         /* Each basic block has its own SMARTable */
         m_smarTable = new SMARTable();
@@ -208,17 +205,17 @@ class SMARBlock {
     }
 
     public Map<Long, Map<String, Set<String>>> getSMARTable() {
-        return m_smarTable.tbl;
+        return m_smarTable.m_tbl;
     }
 
-    private void doRecording(MachineState state) {
+    public void doRecording(MachineState state) {
         /* iterate every instruction in this block */
         InstructionIterator iiter = m_listDB.getInstructions(m_addrSet, true);
         SMARTable smart = new SMARTable();
 
         while (iiter.hasNext()) {
             Instruction inst = iiter.next();
-            boolean suc = m_inpt.doRecording(state, smart);
+            boolean suc = m_inpt.doRecording(state, smart, inst);
         }
 
         if (m_smarTable.containsAll(smart)) {
@@ -240,10 +237,14 @@ class ExecutionBlock {
 
     private Set<MachineState> m_MachState;
 
+    public boolean m_bVisted; // Visted in current cycle
+
     ExecutionBlock(Listing listintDB, Function function, CodeBlock ghidra_block) {
         AddressSet addrSet = ghidra_block.intersect(function.getBody());
 
         m_block = new SMARBlock(listintDB, ghidra_block, addrSet);
+
+        m_bVisted = false;
     }
 
     public void setSuccessor(Set<ExecutionBlock> succsor) {
@@ -267,6 +268,18 @@ class ExecutionBlock {
             return 0;
         else
             return m_MachState.size();
+    }
+
+    public CodeBlock getCodeBlock() {
+        return m_block.getCodeBlock();
+    }
+
+    public boolean isSMRTDirty() {
+        return m_block.isDirty();
+    }
+
+    public Map<Long, Map<String, Set<String>>> getSMARTable() {
+        return m_block.getSMARTable();
     }
 
     public void runCFGOnce() {
@@ -322,8 +335,8 @@ class ExecutionBlock {
         }
 
         /* traverse all outgoing edges in this block */
-        for (ExecutionBlock nextBlk : m_nexts) {
-            if (!nextBlk.m_bVisted && nextBlk.m_dirtySMART)
+        for (ExecutionBlock nextBlk : m_successor) {
+            if (!nextBlk.m_bVisted && nextBlk.isSMRTDirty())
                 nextBlk.runCFGOnce();
         }
     }

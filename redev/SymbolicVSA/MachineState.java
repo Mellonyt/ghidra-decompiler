@@ -73,10 +73,9 @@ public class MachineState {
                 symbol = "V" + address;
             }
 
-            m_mems.put(address, symbol);            
+            m_mems.put(address, symbol);
             return symbol;
-        }
-        else {
+        } else {
             return value;
         }
     }

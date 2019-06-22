@@ -116,8 +116,8 @@ public class SymbolicVSA extends GhidraScript {
                 continue;
 
             // Entry-point
-            if (f.getEntryPoint().getOffset() != 0x400546)
-                continue;
+            //if (f.getEntryPoint().getOffset() != 0x400546)
+            //    continue;
 
             println("Function Entry: " + f.getEntryPoint());
             println("Function Name: " + f.getName());
