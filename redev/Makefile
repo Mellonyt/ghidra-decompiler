@@ -32,9 +32,16 @@ x86interpreter_dep_java		:= $(patsubst %,${SRC_DIR}/operand/%,${dep_javafiles1})
 x86interpreter_dep_class	:= $(patsubst %.java,%.class,${x86interpreter_dep_java})
 
 
+arrayinfer	:= ArrayInfer
+arrayinfer_class	:= ${SRC_DIR}/$(patsubst %,%.class,$(arrayinfer))
+arrayinfer_java  	:= $(patsubst %.class,%.java,$(arrayinfer_class))
+arrayinfer_test_class	:= Test${arrayinfer}.class
+arrayinfer_test_java 	:= ${TEST_DIR}/$(patsubst %.class,%.java,$(arrayinfer_test_class))
+arrayinfer_testor		:= $(patsubst %.class,%,${arrayinfer_test_class})
+
 
 help:
-	echo "targets: ${calculator} ${smartable} ${x86interpreter}"
+	echo "targets: ${calculator} ${smartable} ${x86interpreter} ${arrayinfer}"
 
 
 ${calculator}: ${calculator_class} ${calculator_test_class}
@@ -69,4 +76,14 @@ ${x86interpreter_test_class}: ${x86interpreter_test_java}
 	javac -d . $<
 
 ${x86interpreter_dep_class} : %.class : %.java
+	javac -d . $<
+
+
+${arrayinfer}: ${arrayinfer_class} ${arrayinfer_test_class}
+	java -ea ${arrayinfer_testor}
+
+${arrayinfer_class}: ${arrayinfer_java}
+	javac -d . $<
+
+${arrayinfer_test_class}: ${arrayinfer_test_java}
 	javac -d . $<
