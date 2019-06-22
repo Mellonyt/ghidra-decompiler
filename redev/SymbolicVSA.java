@@ -116,8 +116,8 @@ public class SymbolicVSA extends GhidraScript {
                 continue;
 
             // Entry-point
-            //if (f.getEntryPoint().getOffset() != 0x400546)
-            //    continue;
+            if (f.getEntryPoint().getOffset() != 0x400546)
+                continue;
 
             println("Function Entry: " + f.getEntryPoint());
             println("Function Name: " + f.getName());
@@ -289,7 +289,7 @@ class FunctionSMAR {
      * @return : the SMAR-table
      */
     public Map<Long, Map<String, Set<String>>> getSMARTable() {
-        Map<Long, Map<String, Set<String>>> SMARTable = new HashMap<>(); // Symbolic Store
+        SMARTable SMARTable = new SMARTable(); // Symbolic Store
 
         /* fetch SMART from each block */
         Map<Long, Map<String, Set<String>>> smart;
@@ -300,7 +300,7 @@ class FunctionSMAR {
             if (smart != null)
                 SMARTable.putAll(smart);
         }
-        return SMARTable;
+        return SMARTable.m_tbl;
     }
 }
 
@@ -385,7 +385,7 @@ class ExecutionBlock {
         AddressSet addrSet = ghidra_block.intersect(function.getBody());
 
         m_block = new SMARBlock(listintDB, ghidra_block, addrSet);
-
+        m_MachState = new HashSet<>();
         m_bVisted = false;
     }
 
@@ -616,7 +616,7 @@ class MachineState {
  */
 class SMARTable {
     private static final String VINF = "VINF";
-    private static int WIDENVS_THRESHOLD = 3; // tigger widening
+    private static int WIDENVS_THRESHOLD = 4; // tigger widening
     private SymbolicCalculator m_calc;
 
     public Map<Long, Map<String, Set<String>>> m_tbl;
@@ -678,7 +678,7 @@ class SMARTable {
         final_set.addAll(new_set);
 
         /* do widening if it has more than WIDENVS_THRESHOLD values */
-        if (final_set.size() > WIDENVS_THRESHOLD)
+        if (final_set.size() < WIDENVS_THRESHOLD)
             return false;
 
         /* do windenging for Equal difference series */
@@ -1498,7 +1498,7 @@ class X86Interpreter extends Interpreter {
                 strVal1 = getRegisterValue(oprd1);
             } else if (m_OPRDTYPE.isScalar(oprd1ty)) {
                 oprd1 = inst.getDefaultOperandRepresentation(1);
-                strVal1 = m_SymCalc.symbolicAdd("", oprd1);
+                strVal1 = m_SymCalc.symbolicAdd("0", oprd1);
             } else {
                 /* Operand 1 is invalid, throw exeception */
                 throw new InvalidOperand("858", inst, 1);
@@ -2077,6 +2077,7 @@ class SymbolicCalculator {
                 part0S = elems0[0];
                 part0V = 0;
             } else {
+                System.out.println(String.format("2083: (%s) (%s)", symbol0, symbol1));
                 throw new InvalidSymboicValue("1833", symbol0);
             }
         } else if (elems0.length == 2) {

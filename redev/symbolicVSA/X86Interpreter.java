@@ -576,7 +576,7 @@ public class X86Interpreter extends Interpreter {
                 strVal1 = getRegisterValue(oprd1);
             } else if (m_OPRDTYPE.isScalar(oprd1ty)) {
                 oprd1 = inst.getDefaultOperandRepresentation(1);
-                strVal1 = m_SymCalc.symbolicAdd("", oprd1);
+                strVal1 = m_SymCalc.symbolicAdd("0", oprd1);
             } else {
                 /* Operand 1 is invalid, throw exeception */
                 throw new InvalidOperand("858", inst, 1);

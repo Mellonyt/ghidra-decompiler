@@ -11,7 +11,7 @@ import symbolicVSA.SymbolicCalculator;
  */
 public class SMARTable {
     private static final String VINF = "VINF";
-    private static int WIDENVS_THRESHOLD = 3; // tigger widening
+    private static int WIDENVS_THRESHOLD = 5; // tigger widening
     private SymbolicCalculator m_calc;
 
     public Map<Long, Map<String, Set<String>>> m_tbl;
@@ -73,7 +73,7 @@ public class SMARTable {
         final_set.addAll(new_set);
 
         /* do widening if it has more than WIDENVS_THRESHOLD values */
-        if (final_set.size() > WIDENVS_THRESHOLD)
+        if (final_set.size() < WIDENVS_THRESHOLD)
             return false;
 
         /* do windenging for Equal difference series */

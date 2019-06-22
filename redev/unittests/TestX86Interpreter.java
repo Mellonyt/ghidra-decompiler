@@ -151,6 +151,8 @@ class TestClass {
         Object[] oprd_rbx;
         InstructionDB inst;
 
+         
+         
 
         rax = new Register("RAX");
         rbx = new Register("RBX");
@@ -186,6 +188,22 @@ class TestClass {
         inpt.doRecording(state, smart, inst);
         assert(state.getRegValue(rax.getName()).equals("VRBX"));
 
+
+        Object[] oprd_mem;
+        Object[] oprd_const;
+        Register rbp;
+        Scalar s0, s1;
+        
+        /* MOV dword ptr [RBP + -0x64],0x0 */
+        rbp = new Register("RBP");
+        s0 = new Scalar(-0x64);
+        s1 = new Scalar(0);
+        oprd_mem = new Object[] {rbp, s0};
+        oprd_const = new Object[] {s1};
+        inst = new InstructionDB(0x400564L, "mov", oprd_mem, oprd_const);
+        inpt.doRecording(state, smart, inst);
+       
+        
         /* add more test-cases */
         System.out.println("Run doTest successfully");
     }

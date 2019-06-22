@@ -147,7 +147,7 @@ public class FunctionSMAR {
      * @return : the SMAR-table
      */
     public Map<Long, Map<String, Set<String>>> getSMARTable() {
-        Map<Long, Map<String, Set<String>>> SMARTable = new HashMap<>(); // Symbolic Store
+        SMARTable SMARTable = new SMARTable(); // Symbolic Store
 
         /* fetch SMART from each block */
         Map<Long, Map<String, Set<String>>> smart;
@@ -158,7 +158,7 @@ public class FunctionSMAR {
             if (smart != null)
                 SMARTable.putAll(smart);
         }
-        return SMARTable;
+        return SMARTable.m_tbl;
     }
 }
 
@@ -243,7 +243,7 @@ class ExecutionBlock {
         AddressSet addrSet = ghidra_block.intersect(function.getBody());
 
         m_block = new SMARBlock(listintDB, ghidra_block, addrSet);
-
+        m_MachState = new HashSet<>();
         m_bVisted = false;
     }
 
