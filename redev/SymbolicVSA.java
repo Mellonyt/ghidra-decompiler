@@ -116,7 +116,7 @@ public class SymbolicVSA extends GhidraScript {
                 continue;
 
             // Entry-point
-            if (f.getEntryPoint().getOffset() != 0x0400597)
+            if (f.getEntryPoint().getOffset() != 0x400726)
                 continue;
 
             println("Function Entry: " + f.getEntryPoint());
@@ -1135,7 +1135,8 @@ class X86Interpreter extends Interpreter {
 
         else if (op.equalsIgnoreCase("call")) {
             /* call xxx */
-            System.out.println("400: fix-me, call xxx");
+            _record1call(inst);
+
         } else if (op.charAt(0) == 'j' || op.charAt(0) == 'J') {
             /* jump xxx & jcc xx */
             System.out.println("405: fix-me, jxx");
@@ -1268,6 +1269,21 @@ class X86Interpreter extends Interpreter {
         updateRegisterWriteAccess(inst.getAddress(), "RDX", strRem);
     }
 
+            private void _record1call(Instruction inst) {
+                Object[] objs = inst.getOpObjects(0);
+                String strValue, strValSP;
+        
+                // Scalar s = (Scalar) objs[0];
+        
+                // /* Update RSP register status */
+                // strValSP = getRegisterValue("RSP");
+                // strValue = m_SymCalc.symbolicAdd(strValSP, s.getValue() + 8);
+                // updateRegisterWriteAccess(inst.getAddress(), "RSP", strValue);
+
+                System.out.println("400: fix-me, call xxx" + "");
+            }
+
+
     private void _record1retn(Instruction inst) {
         Object[] objs = inst.getOpObjects(0);
         String strValue, strValSP;
@@ -1337,6 +1353,10 @@ class X86Interpreter extends Interpreter {
 
         else if (op.equalsIgnoreCase("shr")) {
             _record2shr(inst);
+        }
+
+        else if (op.equalsIgnoreCase("imul")) {
+            _record2imul(inst);
         }
 
         else {
@@ -1658,6 +1678,50 @@ class X86Interpreter extends Interpreter {
         }
     }
 
+    /*
+     * IMUL r16,r/m16; IMUL r32,r/m32; IMUL r16,imm8; IMUL r32,imm8; IMUL r16,imm16
+     * IMUL r32,imm32;
+     */
+    private void _record2imul(Instruction inst) {
+        int oprd0ty = inst.getOperandType(0);
+        int oprd1ty = inst.getOperandType(1);
+        Object[] objs0 = inst.getOpObjects(0);
+        Object[] objs1 = inst.getOpObjects(1);
+        String strVal0, strVal1, strRes;
+
+        if (m_OPRDTYPE.isRegister(oprd0ty)) {
+            Register rOprd0 = (Register) objs0[0];
+            strVal0 = getRegisterValue(rOprd0);
+
+            if (m_OPRDTYPE.isRegister(oprd1ty)) {
+                /* imul reg, reg */
+                Register rOprd1 = (Register) objs1[0];
+                strVal1 = getRegisterValue(rOprd1);
+
+            } else if (m_OPRDTYPE.isScalar(oprd1ty)) {
+                /* xor rax, 8; */
+                Scalar sOprd1 = (Scalar) objs1[0];
+                strVal1 = String.valueOf(sOprd1.getValue());
+
+            } else { /* memory oprand */
+                String strAddr1 = _calcMemAddress(inst.getDefaultOperandRepresentation(1), objs1);
+
+                /* update memory read access */
+                updateMemoryReadAccess(inst.getAddress(), strAddr1);
+
+                /* fetch the value from the memory elememt */
+                strVal1 = getMemoryValue(strAddr1);
+            }
+            /* upate register status */
+            strRes = m_SymCalc.symbolicMul(strVal0, strVal1);
+            updateRegisterWriteAccess(inst.getAddress(), rOprd0, strRes);
+
+        } else {
+            /* Operand 1 is invalid, throw exeception */
+            throw new InvalidOperand("949", inst, 2);
+        }
+    }
+
     private void _doRecording3(Instruction inst) {
         System.out.println("1035: " + inst.toString());
 
@@ -1741,9 +1805,8 @@ class X86Interpreter extends Interpreter {
 
                 strAddress = String.valueOf(a.getOffset());
                 return strAddress;
-            }
 
-            else {
+            } else {
                 /* This operand is invalid, throw exeception */
                 throw new InvalidOperand("992", objs_of_MemOperand);
             }

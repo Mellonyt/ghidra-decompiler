@@ -522,24 +522,27 @@ public class X86Interpreter extends Interpreter {
         if (m_OPRDTYPE.isRegister(oprd0ty)) {
             Register rOprd0 = (Register) objs0[0];
             String strAddr1, strVal1;
-
+            System.out.println("525" + inst.toString());
             if (m_OPRDTYPE.isRegister(oprd1ty)) {
                 /* mov reg, reg */
                 Register rOprd1 = (Register) objs1[0];
-
+                System.out.println("529" + inst.toString());
+            
                 strVal1 = getRegisterValue(rOprd1);
                 updateRegisterWriteAccess(inst.getAddress(), rOprd0, strVal1);
 
             } else if (m_OPRDTYPE.isScalar(oprd1ty)) {
                 /* mov rax, 8; */
                 Scalar sOprd1 = (Scalar) objs1[0];
-
+                System.out.println("535" + inst.toString());
+            
                 strVal1 = String.valueOf(sOprd1.getValue());
                 updateRegisterWriteAccess(inst.getAddress(), rOprd0, strVal1);
 
             } else { /* memory oprand */
                 strAddr1 = _calcMemAddress(inst.getDefaultOperandRepresentation(1), objs1);
-
+                System.out.println("544" + inst.toString());
+            
                 /* update memory read access */
                 updateMemoryReadAccess(inst.getAddress(), strAddr1);
 
@@ -806,6 +809,7 @@ public class X86Interpreter extends Interpreter {
 
                 /* get regiser value */
                 strValue = getRegisterValue(r.getName());
+                System.out.println("1779" + oprd_exp + "   " + r.getName() + " " +strValue);
                 return strValue;
             } else if (objs[0] instanceof Scalar) {
                 Scalar s = (Scalar) objs[0];

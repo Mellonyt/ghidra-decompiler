@@ -133,9 +133,9 @@ class TestClass {
     }
 
     public void doTest() {
-        test1oprd();
+        // test1oprd();
         test2oprd();
-        test_si_oprand();
+        // test_si_oprand();
     }
 
     public void test1oprd() {
@@ -218,6 +218,12 @@ class TestClass {
         oprd_const = new Object[] { s1 };
         inst = new InstructionDB(0x400564L, "mov", "[RBP + -0x64]", oprd_mem, "0x0", oprd_const);
         inpt.doRecording(state, smart, inst);
+
+        /* mov rax, [rax] */
+        oprd_mem = new Object[] { rax };
+        inst = new InstructionDB(0x400564L, "mov", "RAX", oprd_rax, "[RAX]", oprd_mem);
+        inpt.doRecording(state, smart, inst);
+        assert(state.getRegValue(rax.getName()).equals("VVRBX"));
 
         /* add more test-cases */
         System.out.println("Run test2oprd successfully");

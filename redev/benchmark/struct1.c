@@ -5,11 +5,16 @@ struct simple_st{
     int n;
 };
 
+int sum_up(struct simple_st *s) {
+    return s->m + s->n;
+}
+
 int main(int argc, char* argv[])
 {
     struct simple_st s = {10, 20};
     int sum;
 
-    sum = s.m + s.n;
-    return sum;
+    sum = sum_up(&s);
+
+    return 0;
 }
