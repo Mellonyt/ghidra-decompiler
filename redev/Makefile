@@ -32,16 +32,16 @@ x86interpreter_dep_java		:= $(patsubst %,${SRC_DIR}/operand/%,${dep_javafiles1})
 x86interpreter_dep_class	:= $(patsubst %.java,%.class,${x86interpreter_dep_java})
 
 
-arrayinfer	:= ArrayInfer
-arrayinfer_class	:= ${SRC_DIR}/$(patsubst %,%.class,$(arrayinfer))
-arrayinfer_java  	:= $(patsubst %.class,%.java,$(arrayinfer_class))
-arrayinfer_test_class	:= Test${arrayinfer}.class
-arrayinfer_test_java 	:= ${TEST_DIR}/$(patsubst %.class,%.java,$(arrayinfer_test_class))
-arrayinfer_testor		:= $(patsubst %.class,%,${arrayinfer_test_class})
+structinfer	:= StructInfer
+structinfer_class	:= ${SRC_DIR}/$(patsubst %,%.class,$(structinfer))
+structinfer_java  	:= $(patsubst %.class,%.java,$(structinfer_class))
+structinfer_test_class	:= Test${structinfer}.class
+structinfer_test_java 	:= ${TEST_DIR}/$(patsubst %.class,%.java,$(structinfer_test_class))
+structinfer_testor		:= $(patsubst %.class,%,${structinfer_test_class})
 
 
 help:
-	echo "targets: ${calculator} ${smartable} ${x86interpreter} ${arrayinfer}"
+	echo "targets: ${calculator} ${smartable} ${x86interpreter} ${structinfer}"
 
 
 ${calculator}: ${calculator_class} ${calculator_test_class}
@@ -79,11 +79,11 @@ ${x86interpreter_dep_class} : %.class : %.java
 	javac -d . $<
 
 
-${arrayinfer}: ${arrayinfer_class} ${arrayinfer_test_class}
-	java -ea ${arrayinfer_testor}
+${structinfer}: ${structinfer_class} ${structinfer_test_class}
+	java -ea ${structinfer_testor}
 
-${arrayinfer_class}: ${arrayinfer_java}
+${structinfer_class}: ${structinfer_java}
 	javac -d . $<
 
-${arrayinfer_test_class}: ${arrayinfer_test_java}
+${structinfer_test_class}: ${structinfer_test_java}
 	javac -d . $<

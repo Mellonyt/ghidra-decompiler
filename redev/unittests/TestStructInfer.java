@@ -4,11 +4,11 @@ import symbolicVSA.*;
 
 class TestClass {
 
-    ArrayInfer infer;
+    StructInfer infer;
     SymbolicCalculator calc;
 
     TestClass() {
-        infer = new ArrayInfer();
+        infer = new StructInfer();
         calc = SymbolicCalculator.getCalculator();
     }
 
@@ -113,7 +113,6 @@ class TestClass {
         mapVS.put("VRSP -108", setVS);
         mapSMAT.put(0x40057dL, mapVS);
 
-        ArrayInfer infer = new ArrayInfer();
         Set<Map<String, List<Long>>> arrayAccess = infer.findPossibleArrayAccess(mapSMAT);
 
         System.out.println(arrayAccess.toString());
@@ -484,7 +483,7 @@ class TestClass {
     }
 }
 
-public class TestArrayInfer {
+public class TestStructInfer {
 
     public static void main(String[] args) {
         TestClass test = new TestClass();
