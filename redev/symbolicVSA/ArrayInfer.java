@@ -33,7 +33,6 @@ public class ArrayInfer {
 
             List<String> listAddr = new ArrayList<>(mapVS.keySet());
             assert (listAddr.size() > 0);
-            
 
             /* Test if in a Scope ? */
             addr = listAddr.get(0);
@@ -42,17 +41,15 @@ public class ArrayInfer {
             /* Get the scope name */
             scope = addr.split(" ", 0)[0];
 
-
             /* In the same scope ? */
             boolean bSameScope = true;
             listVS = new ArrayList<>();
-            for (int i = 0; i < listAddr.size(); i++) {                
+            for (int i = 0; i < listAddr.size(); i++) {
                 String delta = m_calc.symbolicSub(listAddr.get(i), scope);
                 if (!m_calc.isPureDigital(delta)) {
                     bSameScope = false;
                     break;
-                }
-                else {
+                } else {
                     listVS.add(Long.decode(delta));
                 }
             }
@@ -110,7 +107,6 @@ public class ArrayInfer {
                 if (!m_calc.isPureDigital(delta))
                     continue;
 
-
                 addrSet.add(Long.decode(delta));
                 Collections.sort(addrSet);
             }
@@ -118,12 +114,11 @@ public class ArrayInfer {
         return mapScopeAccess;
     }
 
-
-    public void inferArray(Set<Map<String, List<Long>>> setArrayAccess, Map<String, List<Long>> mapScopeAccess) {
-        List<Long> listScopeVS;
+    public Set<String> inferArray(Set<Map<String, List<Long>>> setArrayAccess, Map<String, List<Long>> mapScopeAccess) {
+        Set<String> arrInfo = new HashSet<>();
 
         for (Map<String, List<Long>> mapArrayAccess : setArrayAccess) {
-            List<Long> listArrOffset = new ArrayList<>();;
+            List<Long> listArrOffset = new ArrayList<>();
             String scope = "";
 
             for (Map.Entry<String, List<Long>> entArrayAccess : mapArrayAccess.entrySet()) {
@@ -139,8 +134,8 @@ public class ArrayInfer {
 
             /* Calculate up-bound */
             long upbound = maxAddr;
+            List<Long> listScopeVS = mapScopeAccess.get(scope);
 
-            listScopeVS = mapScopeAccess.get(scope);
             if (listScopeVS == null) {
                 upbound = maxAddr;
             } else {
@@ -153,10 +148,13 @@ public class ArrayInfer {
                     }
                 }
             }
-            /* For debuging */
-            String msg = String.format("Base: %s%d, stide: %d: upbound: %d", scope, minAddr, stride, upbound);
-            System.out.println(msg);
 
+            /* For debuging */
+            String msg = String.format("Base: %s%d, stide: %d: size in bytes: %d", scope, minAddr, stride,
+                    upbound - minAddr);
+            arrInfo.add(msg);
         }
+
+        return arrInfo;
     }
 }

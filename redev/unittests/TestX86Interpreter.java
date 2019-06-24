@@ -2,31 +2,37 @@ import symbolicVSA.*;
 import symbolicVSA.operand.*;
 
 class InstructionDB implements Instruction {
-    private Address m_addr;
-    private String m_opcode;
-    private Object[] m_objdst;
-    private Object[] m_objsrc;
+    private Address m_Addr;
+    private String m_opcode, m_strDst, m_strSrc;
+    private Object[] m_objDst;
+    private Object[] m_objSrc;
 
-    public InstructionDB(long address, String opcode, Object[] dst_oprand, Object[] src_oprand) {
-        m_addr = new Address(address);
+    public InstructionDB(long address, String opcode, String dst, Object[] dst_oprand, String src,
+            Object[] src_oprand) {
+        m_Addr = new Address(address);
         m_opcode = opcode;
-        m_objdst = dst_oprand;
-        m_objsrc = src_oprand;
+        m_strDst = new String(dst);
+        m_objDst = dst_oprand;
+        m_strSrc = new String(src);
+        m_objSrc = src_oprand;
     }
 
-    public InstructionDB(long address, String opcode, Object[] oprand) {
-        m_addr = new Address(address);
+    public InstructionDB(long address, String opcode, String oprd, Object[] oprand) {
+        m_Addr = new Address(address);
         m_opcode = opcode;
-        m_objdst = oprand;
-        m_objsrc = null;
+        m_strDst = oprd;
+        m_objDst = oprand;
+        m_strSrc = null;
+        m_objSrc = null;
+
     }
 
     public int getNumOperands() {
         int n = 0;
 
-        if (m_objsrc != null && m_objsrc.length != 0)
+        if (m_objSrc != null && m_objSrc.length != 0)
             n++;
-        if (m_objdst != null && m_objdst.length != 0)
+        if (m_objDst != null && m_objDst.length != 0)
             n++;
 
         return n;
@@ -37,35 +43,35 @@ class InstructionDB implements Instruction {
      */
     public int getOperandType(int opIndex) {
         if (opIndex == 0) {
-            if (m_objdst == null) {
+            if (m_objDst == null) {
                 return 0; // Exception ?
-            } else if (m_objdst.length == 1) {
-                if (m_objdst[0] instanceof Register)
+            } else if (m_objDst.length == 1) {
+                if (m_objDst[0] instanceof Register)
                     return 1;
-                else if (m_objdst[0] instanceof Scalar)
+                else if (m_objDst[0] instanceof Scalar)
                     return 2;
-                else if (m_objdst[0] instanceof GenericAddress)
+                else if (m_objDst[0] instanceof GenericAddress)
                     return 3;
                 else
                     return 0;
-            } else if (m_objdst.length > 1) {
+            } else if (m_objDst.length > 1) {
                 return 4;
             } else {
                 return 0; // Exception ?
             }
         } else if (opIndex == 1) {
-            if (m_objsrc == null) {
+            if (m_objSrc == null) {
                 return 0; // Exception ?
-            } else if (m_objsrc.length == 1) {
-                if (m_objsrc[0] instanceof Register)
+            } else if (m_objSrc.length == 1) {
+                if (m_objSrc[0] instanceof Register)
                     return 1;
-                else if (m_objsrc[0] instanceof Scalar)
+                else if (m_objSrc[0] instanceof Scalar)
                     return 2;
-                else if (m_objsrc[0] instanceof GenericAddress)
+                else if (m_objSrc[0] instanceof GenericAddress)
                     return 3;
                 else
                     return 0;
-            } else if (m_objsrc.length > 1) {
+            } else if (m_objSrc.length > 1) {
                 return 4;
             } else {
                 return 0; // Exception ?
@@ -76,32 +82,20 @@ class InstructionDB implements Instruction {
     }
 
     public String getDefaultOperandRepresentation(int opIndex) {
-        Object[] objs;
-
         if (opIndex == 0) {
-            objs = m_objdst;
+            return m_strDst;
         } else if (opIndex == 1) {
-            objs = m_objsrc;
+            return m_strSrc;
         } else {
-            objs = null;
+            return "";
         }
-
-        String oprd = "";
-        if (objs != null &&  objs.length > 0) {
-            String[] arr = new String[objs.length];
-            for (int i = 0; i < objs.length; i++) {
-                arr[i] = objs[i].toString();
-            }
-            oprd = String.join(" ", arr);
-        }
-        return oprd;
     }
 
     public Object[] getOpObjects(int opIndex) {
         if (opIndex == 0)
-            return m_objsrc;
+            return m_objDst;
         else if (opIndex == 1)
-            return m_objsrc;
+            return m_objSrc;
         else
             return null;
     }
@@ -111,7 +105,7 @@ class InstructionDB implements Instruction {
     }
 
     public Address getAddress() {
-        return m_addr;
+        return m_Addr;
     }
 
     public String toString() {
@@ -120,12 +114,9 @@ class InstructionDB implements Instruction {
         if (n == 0) {
             return m_opcode;
         } else if (n == 1) {
-            String dst = getDefaultOperandRepresentation(0);
-            return String.format("%s %s", m_opcode, dst);
+            return String.format("%s %s", m_opcode, m_strDst);
         } else if (n == 2) {
-            String dst = getDefaultOperandRepresentation(0);
-            String src = getDefaultOperandRepresentation(1);
-            String oprds = String.join(",", dst, src);
+            String oprds = String.join(",", m_strDst, m_strSrc);
             return String.format("%s %s", m_opcode, oprds);
         } else {
             return "";
@@ -142,6 +133,12 @@ class TestClass {
     }
 
     public void doTest() {
+        test1oprd();
+        test2oprd();
+        test_si_oprand();
+    }
+
+    public void test1oprd() {
         MachineState state = MachineState.createInitState(inpt.getCPU());
         SMARTable smart = new SMARTable();
 
@@ -151,61 +148,120 @@ class TestClass {
         Object[] oprd_rbx;
         InstructionDB inst;
 
-         
-         
-
         rax = new Register("RAX");
         rbx = new Register("RBX");
 
-        assert(state.getRegValue(rax.getName()).equals("VRAX"));
-        assert(state.getRegValue(rbx.getName()).equals("VRBX"));
+        oprd_rax = new Object[] { rax };
+        oprd_rbx = new Object[] { rbx };
 
+        assert (state.getRegValue(rax.getName()).equals("VRAX"));
+        assert (state.getRegValue(rbx.getName()).equals("VRBX"));
 
-        oprd_rax = new Object[] {rax};
-        oprd_rbx = new Object[] {rbx};
-
-        inst = new InstructionDB(0x80000L, "mov", oprd_rax, oprd_rbx);
+        inst = new InstructionDB(0x80000L, "mov", "RAX", oprd_rax, "RBX", oprd_rbx);
         inpt.doRecording(state, smart, inst);
-        assert(state.getRegValue(rax.getName()).equals("VRBX"));
+        assert (state.getRegValue(rax.getName()).equals("VRBX"));
 
+        inst = new InstructionDB(0x40000L, "push", "RAX", oprd_rax);
+        inpt.doRecording(state, smart, inst);
+        inst = new InstructionDB(0x40001L, "pop", "RAX", oprd_rax);
+        inpt.doRecording(state, smart, inst);
+        assert (state.getRegValue(rax.getName()).equals("VRBX"));
 
-        inst = new InstructionDB(0x40000L, "push", oprd_rax);
+        inst = new InstructionDB(0x40000L, "push", "RBX", oprd_rbx);
         inpt.doRecording(state, smart, inst);
-        inst = new InstructionDB(0x40001L, "pop", oprd_rax);
+        inst = new InstructionDB(0x40001L, "pop", "RBX", oprd_rbx);
         inpt.doRecording(state, smart, inst);
-        assert(state.getRegValue(rax.getName()).equals("VRBX"));
+        assert (state.getRegValue(rbx.getName()).equals("VRBX"));
 
-        inst = new InstructionDB(0x40000L, "push", oprd_rbx);
-        inpt.doRecording(state, smart, inst);
-        inst = new InstructionDB(0x40001L, "pop", oprd_rbx);
-        inpt.doRecording(state, smart, inst);
-        assert(state.getRegValue(rbx.getName()).equals("VRBX"));
+        /* add more test-cases */
+        System.out.println("Run test1oprd successfully");
+    }
 
-        inst = new InstructionDB(0x40001L, "sub", oprd_rax, oprd_rbx);
-        inpt.doRecording(state, smart, inst);
-        assert(state.getRegValue(rax.getName()).equals("0"));
-        inst = new InstructionDB(0x40002L, "add", oprd_rax, oprd_rbx);
-        inpt.doRecording(state, smart, inst);
-        assert(state.getRegValue(rax.getName()).equals("VRBX"));
+    public void test2oprd() {
+        MachineState state = MachineState.createInitState(inpt.getCPU());
+        SMARTable smart = new SMARTable();
 
-
+        /* create instruction: mov RAX, RBX */
+        Register rax, rbx, rdx, rbp;
+        Object[] oprd_rax;
+        Object[] oprd_rbx;
+        Object[] oprd_rdx;
+        Object[] oprd_rbp;
         Object[] oprd_mem;
         Object[] oprd_const;
-        Register rbp;
         Scalar s0, s1;
-        
-        /* MOV dword ptr [RBP + -0x64],0x0 */
+        InstructionDB inst;
+
+        rax = new Register("RAX");
+        rbx = new Register("RBX");
+        rdx = new Register("RDX");
         rbp = new Register("RBP");
+
+        oprd_rax = new Object[] { rax };
+        oprd_rbx = new Object[] { rbx };
+        oprd_rdx = new Object[] { rdx };
+        oprd_rbp = new Object[] { rbp };
+
+        inst = new InstructionDB(0x40000L, "mov", "RAX", oprd_rax, "RBX", oprd_rbx);
+        inpt.doRecording(state, smart, inst);
+        inst = new InstructionDB(0x40001L, "sub", "RAX", oprd_rax, "RBX", oprd_rbx);
+        inpt.doRecording(state, smart, inst);
+        assert (state.getRegValue(rax.getName()).equals("0"));
+        inst = new InstructionDB(0x40002L, "add", "RAX", oprd_rax, "RBX", oprd_rbx);
+        inpt.doRecording(state, smart, inst);
+        assert (state.getRegValue(rax.getName()).equals("VRBX"));
+
+        /* MOV dword ptr [RBP + -0x64],0x0 */
         s0 = new Scalar(-0x64);
         s1 = new Scalar(0);
-        oprd_mem = new Object[] {rbp, s0};
-        oprd_const = new Object[] {s1};
-        inst = new InstructionDB(0x400564L, "mov", oprd_mem, oprd_const);
+        oprd_mem = new Object[] { rbp, s0 };
+        oprd_const = new Object[] { s1 };
+        inst = new InstructionDB(0x400564L, "mov", "[RBP + -0x64]", oprd_mem, "0x0", oprd_const);
         inpt.doRecording(state, smart, inst);
-       
-        
+
         /* add more test-cases */
-        System.out.println("Run doTest successfully");
+        System.out.println("Run test2oprd successfully");
+    }
+
+    public void test_si_oprand() {
+        MachineState state = MachineState.createInitState(inpt.getCPU());
+        SMARTable smart = new SMARTable();
+
+        /* create instruction: mov RAX, RBX */
+        Register rax, rbx, rbp, rdx;
+        Object[] oprd_rax;
+        Object[] oprd_rbx;
+        Object[] oprd_rbp;
+        Object[] oprd_rdx;
+        Object[] oprd_mem;
+        Object[] oprd_const;
+        Scalar s0, s1;
+        InstructionDB inst;
+
+        rax = new Register("RAX");
+        rdx = new Register("RDX");
+
+        oprd_rax = new Object[] { rax };
+        oprd_rdx = new Object[] { rdx };
+
+        /* intializatoin: mov rax, 0x1 */
+        s0 = new Scalar(1);
+        oprd_const = new Object[] { s0 };
+        inst = new InstructionDB(0x400568L, "mov", "RAX", oprd_rax, "0x1", oprd_const);
+        inpt.doRecording(state, smart, inst);
+        state.getRegValue(rax.getName());
+        assert (state.getRegValue(rax.getName()).equals("1"));
+
+        /* LEA RDX,[RAX*0x4] */
+        s0 = new Scalar(4);
+        oprd_rdx = new Object[] { rdx };
+        oprd_mem = new Object[] { rax, s0 };
+        inst = new InstructionDB(0x400568L, "lea", "RDX", oprd_rdx, "[RAX*0x4]", oprd_mem);
+        inpt.doRecording(state, smart, inst);
+        assert (state.getRegValue(rdx.getName()).equals("4"));
+
+        /* add more test-cases */
+        System.out.println("Run test_si_oprand successfully");
     }
 }
 
