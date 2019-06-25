@@ -38,12 +38,116 @@ import ghidra.program.database.*;
 import ghidra.program.database.function.*;
 import ghidra.program.database.code.*;
 
+import ghidra.program.model.data.*;
+import ghidra.program.model.symbol.*;
+
 import ghidra.util.task.TaskMonitor; // TaskMonitor
 import ghidra.app.script.GhidraScript;
 
 public class SymbolicVSA extends GhidraScript {
     private Program program;
     private Listing listing;
+
+    /**
+     * RDI, RSI, RDX, RCX, R8, R9, XMM0–7
+     */
+    void SystemVLinux64(Set<String> scopes, Function f) {
+        ParameterImpl parameter;
+        Register register;
+        int nOrinal;
+
+        try {
+        nOrinal = 0;
+        /* for general purpose registers */
+        for (int i = 0; i < 1; i++)
+        {
+            if (!scopes.contains("VRDI")) continue;
+            register = program.getProgramContext().getRegister("RDI");
+            parameter = new ParameterImpl("GP0", DWordDataType.dataType, register, program);
+            f.insertParameter(nOrinal++, parameter, SourceType.ANALYSIS);
+
+            if (!scopes.contains("VRSI")) continue;
+            register = program.getProgramContext().getRegister("RSI");
+            parameter = new ParameterImpl("GP1", DWordDataType.dataType, register, program);
+            f.insertParameter(nOrinal++, parameter, SourceType.ANALYSIS);
+
+            if (!scopes.contains("VRDX")) continue;
+            register = program.getProgramContext().getRegister("RDX");
+            parameter = new ParameterImpl("GP2", DWordDataType.dataType, register, program);
+            f.insertParameter(nOrinal++, parameter, SourceType.ANALYSIS);
+
+            if (!scopes.contains("VRCX")) continue;
+            register = program.getProgramContext().getRegister("RCX");
+            parameter = new ParameterImpl("GP3", DWordDataType.dataType, register, program);
+            f.insertParameter(nOrinal++, parameter, SourceType.ANALYSIS);
+
+            if (!scopes.contains("VR8")) continue;
+            register = program.getProgramContext().getRegister("R8");
+            parameter = new ParameterImpl("GP4", DWordDataType.dataType, register, program);
+            f.insertParameter(nOrinal++, parameter, SourceType.ANALYSIS);
+
+            if (!scopes.contains("VR9")) continue;
+            register = program.getProgramContext().getRegister("R9");
+            parameter = new ParameterImpl("GP5", DWordDataType.dataType, register, program);
+            f.insertParameter(nOrinal++, parameter, SourceType.ANALYSIS);
+        }
+
+        /* for float-point registers */
+        for (int i = 0; i < 1; i++)
+        {
+            if (!scopes.contains("VXMM0")) continue;
+            register = program.getProgramContext().getRegister("XMM0");
+            parameter = new ParameterImpl("FP0", FloatDataType.dataType, register, program);
+            f.insertParameter(nOrinal++, parameter, SourceType.ANALYSIS);
+
+            if (!scopes.contains("VXMM1")) continue;
+            register = program.getProgramContext().getRegister("XMM1");
+            parameter = new ParameterImpl("FP1", FloatDataType.dataType, register, program);
+            f.insertParameter(nOrinal++, parameter, SourceType.ANALYSIS);
+            f.insertParameter(nOrinal++, parameter, SourceType.ANALYSIS);
+
+            if (!scopes.contains("VXMM2")) continue;
+            register = program.getProgramContext().getRegister("XMM2");
+            parameter = new ParameterImpl("FP2", FloatDataType.dataType, register, program);
+            f.insertParameter(nOrinal++, parameter, SourceType.ANALYSIS);
+
+            if (!scopes.contains("VXMM3")) continue;
+            register = program.getProgramContext().getRegister("XMM3");
+            parameter = new ParameterImpl("FP3", FloatDataType.dataType, register, program);
+            f.insertParameter(nOrinal++, parameter, SourceType.ANALYSIS);
+
+            if (!scopes.contains("VXMM4")) continue;
+            register = program.getProgramContext().getRegister("XMM4");
+            parameter = new ParameterImpl("FP4", FloatDataType.dataType, register, program);
+            f.insertParameter(nOrinal++, parameter, SourceType.ANALYSIS);
+
+            if (!scopes.contains("VXMM5")) continue;
+            register = program.getProgramContext().getRegister("XMM5");
+            parameter = new ParameterImpl("FP5", FloatDataType.dataType, register, program);
+            f.insertParameter(nOrinal++, parameter, SourceType.ANALYSIS);
+
+            if (!scopes.contains("VXMM6")) continue;
+            register = program.getProgramContext().getRegister("XMM6");
+            parameter = new ParameterImpl("FP6", FloatDataType.dataType, register, program);
+            f.insertParameter(nOrinal++, parameter, SourceType.ANALYSIS);
+
+            if (!scopes.contains("VXMM7")) continue;
+            register = program.getProgramContext().getRegister("XMM7");
+            parameter = new ParameterImpl("FP7", FloatDataType.dataType, register, program);
+            f.insertParameter(nOrinal++, parameter, SourceType.ANALYSIS);
+        }
+    }
+    catch (Exception e) {
+        System.err.println(e.toString());
+    }
+    }
+
+    /**
+     * RCX/XMM0, RDX/XMM1, R8/XMM2, R9/XMM3
+     */
+    void MicrosoftWindows64() {
+
+    }
 
     /* Calculate the address space of code segment */
     AddressSet getCodeSegmentAddresRange() {
@@ -129,6 +233,8 @@ public class SymbolicVSA extends GhidraScript {
             Map<Long, Map<String, Set<String>>> smart = smar.getSMARTable();
 
             Map<String, List<Long>> scopeAccess = infer.findMemoryScopesWOArray(smart);
+            println("Find scopes: " + scopeAccess);
+
             Set<Map<String, List<Long>>> arrayAccess = infer.findPossibleArrayAccess(smart);
 
             Set<String> info = infer.inferArray(arrayAccess, scopeAccess);
@@ -141,6 +247,9 @@ public class SymbolicVSA extends GhidraScript {
                 List<Long> st = entmapStruct.getValue();
                 println("Find struct @" + entmapStruct.getKey() + ": " + st.toString());
             }
+
+            SystemVLinux64(scopeAccess.keySet(), f);
+            
         }
     }
 
