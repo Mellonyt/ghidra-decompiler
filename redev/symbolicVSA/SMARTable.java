@@ -11,7 +11,7 @@ import symbolicVSA.SymbolicCalculator;
  */
 public class SMARTable {
     private static final String VINF = "VINF";
-    private static int WIDENVS_THRESHOLD = 5; // tigger widening
+    private static int WIDENVS_THRESHOLD = 6; // tigger widening
     private SymbolicCalculator m_calc;
 
     public Map<Long, Map<String, Set<String>>> m_tbl;
@@ -73,40 +73,12 @@ public class SMARTable {
         final_set.addAll(new_set);
 
         /* do widening if it has more than WIDENVS_THRESHOLD values */
-        if (final_set.size() < WIDENVS_THRESHOLD)
+        if (final_set.size() < WIDENVS_THRESHOLD) {
             return false;
-
-        /* do windenging for Equal difference series */
-        int nLen = final_set.size();
-        String vs[] = final_set.toArray(new String[nLen]);
-        long pt[] = new long[nLen - 1];
-        boolean bWidening = true;
-
-        for (int i = 0; i < nLen - 1; i++) {
-            String s = m_calc.symbolicSub(vs[i + 1], vs[i]);
-            if (m_calc.isPureDigital(s)) {
-                pt[i] = Long.decode(s);
-            } else {
-                bWidening = false;
-                break;
-            }
-        }
-
-        if (!bWidening)
-            return false;
-
-        /* Equal difference series ? */
-        boolean bSeries = true;
-        Arrays.sort(pt);
-        for (int i = 1; bSeries && (i < pt.length); i++) {
-            bSeries = (pt[i] == pt[i - 1]);
-        }
-
-        /* Do widening */
-        if (bSeries)
+        } else {
             final_set.add(new String(VINF));
-
-        return true;
+            return true;
+        }
     }
 
     /**

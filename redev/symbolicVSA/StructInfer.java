@@ -26,7 +26,7 @@ public class StructInfer {
         Set<Map<String, List<Long>>> setArrayAccess = new HashSet<>();
         Map<String, List<Long>> mapArrayAccess;
         List<Long> listVS;
-        String scope, addr;
+        String scope;
 
         for (Map.Entry<Long, Map<String, Set<String>>> entMapSMAT : symbolic_memory_access_table.entrySet()) {
             Map<String, Set<String>> mapVS = entMapSMAT.getValue();
@@ -34,16 +34,21 @@ public class StructInfer {
             if (mapVS.size() < 4)
                 continue;
 
-            /* Get a list of accessed memory address by this line of code */
-            List<String> listAddr = new ArrayList<>(mapVS.keySet());
-
-            /* Test if this is a Scope ? */
-            addr = listAddr.get(0);
-            if (addr.length() < 1 || addr.charAt(0) != 'V')
+            /*
+             * Get a list of accessed memory address by this line of code. Just considering
+             * symbolic address. e.g. [RAX, VRSP -1228, VRSP -1216, VRSP -1224]
+             */
+            List<String> listAddr = new ArrayList<>();
+            for (String addr : mapVS.keySet()) {
+                if (addr.length() < 1 || addr.charAt(0) != 'V')
+                    continue;
+                listAddr.add(addr);
+            }
+            if (listAddr.size() < 4)
                 continue;
 
             /* Get the scope name */
-            scope = addr.split(" ", 0)[0];
+            scope = listAddr.get(0).split(" ", 0)[0];
 
             /* Al memory addresses are in the same scope ? */
             boolean bSameScope = true;
@@ -180,7 +185,14 @@ public class StructInfer {
             }
 
             /* For debuging */
-            String base = (minAddr == 0) ? scope : String.format("%s%d", scope, minAddr);
+            String base;
+            if (minAddr == 0)
+                base = scope;
+            else if (minAddr > 0)
+                base = String.format("%s+%d", scope, minAddr);
+            else
+                base = String.format("%s%d", scope, minAddr);
+
             String msg = String.format("Base: %s, stride: %d: size in bytes: %d", base, stride, upbound - minAddr);
 
             arrInfo.add(msg);

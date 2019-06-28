@@ -43,7 +43,6 @@ public class FunctionSMAR {
                 ExecutionBlock smarBlk = new ExecutionBlock(m_listDB, m_function, codeBlk);
                 Address addrStart = codeBlk.getFirstStartAddress();
                 m_blocks.put(addrStart, smarBlk);
-                System.out.println("178: add smart block : " + smarBlk.toString());
             }
         } catch (Exception e) {
             /* fixe-me: ignore current function */
@@ -219,12 +218,10 @@ class SMARBlock {
         }
 
         if (m_smarTable.containsAll(smart)) {
-            System.out.println("593: YES");
             m_dirtySMART = false;
         } else {
             m_smarTable.putAll(smart);
             m_dirtySMART = true;
-            System.out.println("598: False");
         }
     }
 }
