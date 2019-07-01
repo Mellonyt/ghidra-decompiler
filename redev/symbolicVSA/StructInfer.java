@@ -30,7 +30,7 @@ public class StructInfer {
 
         for (Map.Entry<Long, Map<String, Set<String>>> entMapSMAT : symbolic_memory_access_table.entrySet()) {
             Map<String, Set<String>> mapVS = entMapSMAT.getValue();
-            /* WIDENING_THRESHOLD == 4, so it should hava size bigger than or equal to 4 */
+            /* WIDENING_THRESHOLD == 6, so it should hava size bigger than or equal to 4 */
             if (mapVS.size() < 4)
                 continue;
 
@@ -92,25 +92,31 @@ public class StructInfer {
     /**
      * Find out all scopes: each pure symbolic value representing a new scope
      * 
-     * @param mapSMAT
+     * @param memory_access_table
      * @return
      */
-    public Map<String, List<Long>> findMemoryScopesWOArray(
-            Map<Long, Map<String, Set<String>>> symbolic_memory_access_table) {
+    public Map<String, List<Long>> findMemoryScopesWOArray(Map<Long, Map<String, Set<String>>> memory_access_table) {
         Map<String, List<Long>> mapScopeAccess = new HashMap<>();
         List<Long> addrSet;
         String scope;
 
-        for (Map.Entry<Long, Map<String, Set<String>>> entMapSMAT : symbolic_memory_access_table.entrySet()) {
+        for (Map.Entry<Long, Map<String, Set<String>>> entMapSMAT : memory_access_table.entrySet()) {
             Map<String, Set<String>> mapVS = entMapSMAT.getValue();
 
-            if (mapVS.size() > 2) // ignore array access, at most one register and one memory operand
+            /*
+             * WIDENVS_THRESHOLD = 6; tigger widening; // ignore array access, at most one
+             * register and one memory operand
+             */
+            if (mapVS.size() >= 4)
                 continue;
 
-            /* all memory addresses accessed by instructions */
+            /* memory accessed by this function */
             for (Map.Entry<String, Set<String>> entMapVS : mapVS.entrySet()) {
                 String addr = entMapVS.getKey();
-                assert (addr.length() > 0);
+                if (addr == null || addr.length() <= 0) {
+                    throw new NullPointerException(mapVS.toString());
+                }
+
                 if (addr.charAt(0) != 'V')
                     continue;
 

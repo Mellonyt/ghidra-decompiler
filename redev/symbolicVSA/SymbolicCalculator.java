@@ -6,30 +6,26 @@ import java.text.DecimalFormat;
 import symbolicVSA.VSAException;
 
 class InvalidSymboicValue extends VSAException {
-    private static final long serialVersionUID = 1L;
-    private String m_lineno, m_symbol;
+    private String m_symbol;
 
-    public InvalidSymboicValue(String lineno, String symbol) {
-        m_lineno = lineno;
+    public InvalidSymboicValue(String symbol) {
         m_symbol = symbol;
     }
 
     public String toString() {
-        return String.format("%s: InvalidSymboicValue -> %s", m_lineno, m_symbol);
+        return String.format("InvalidSymboicValue -> %s", m_symbol);
     }
 }
 
-class InvalidSymboicOP extends VSAException {
-    private static final long serialVersionUID = 1L;
-    private String m_lineno, m_msg;
+class InvalidSymboicOperation extends VSAException {
+    private String m_msg;
 
-    public InvalidSymboicOP(String lineno, String message) {
-        m_lineno = lineno;
-        m_msg = message;
+    public InvalidSymboicOperation(String expression) {
+        m_msg = expression;
     }
 
     public String toString() {
-        return String.format("%s: InvalidSymboicOP -> %s", m_lineno, m_msg);
+        return String.format("InvalidSymboicOperation -> %s", m_msg);
     }
 }
 
@@ -55,27 +51,22 @@ public class SymbolicCalculator {
     }
 
     public String symbolicAdd(String symbol0, String symbol1) {
-        assert (isSymbolicValue(symbol0) && isSymbolicValue(symbol1));
         return symbolicBinaryOP(symbol0, '+', symbol1);
     }
 
     public String symbolicSub(String symbol0, String symbol1) {
-        assert (isSymbolicValue(symbol0) && isSymbolicValue(symbol1));
         return symbolicBinaryOP(symbol0, '-', symbol1);
     }
 
     public String symbolicMul(String symbol0, String symbol1) {
-        assert (isSymbolicValue(symbol0) && isSymbolicValue(symbol1));
         return symbolicBinaryOP(symbol0, '*', symbol1);
     }
 
     public String symbolicDiv(String symbol0, String symbol1) {
-        assert (isSymbolicValue(symbol0) && isSymbolicValue(symbol1));
         return symbolicBinaryOP(symbol0, '/', symbol1);
     }
 
     public String symbolicXor(String symbol0, String symbol1) {
-        assert (isSymbolicValue(symbol0) && isSymbolicValue(symbol1));
         return symbolicBinaryOP(symbol0, '^', symbol1);
     }
 
@@ -103,14 +94,14 @@ public class SymbolicCalculator {
                 part0S = elems0[0];
                 part0V = 0;
             } else {
-                throw new InvalidSymboicValue("1833", symbol0);
+                throw new InvalidSymboicValue(symbol0);
             }
         } else if (elems0.length == 2) {
             part0S = elems0[0];
             part0V = Long.decode(elems0[1]);
         } else {
             /* We assume each value has at most two parts. */
-            throw new InvalidSymboicValue("1841", symbol0);
+            throw new InvalidSymboicValue(symbol0);
         }
 
         /* parse the symbolic value symbol1 */
@@ -125,14 +116,14 @@ public class SymbolicCalculator {
                 part1S = elems1[0];
                 part1V = 0;
             } else {
-                throw new InvalidSymboicValue("1859", symbol1);
+                throw new InvalidSymboicValue(symbol1);
             }
         } else if (elems1.length == 2) {
             part1S = elems1[0];
             part1V = Long.decode(elems1[1]);
         } else {
             /* We assume each value has at most two parts. */
-            throw new InvalidSymboicValue("1867", symbol1);
+            throw new InvalidSymboicValue(symbol1);
         }
 
         /* calculate the result */
@@ -214,29 +205,25 @@ public class SymbolicCalculator {
         } else {
             /* Thow exception */
             String msg = String.format("(%s) %s (%s)", symbol0, Character.toString(op), symbol1);
-            throw new InvalidSymboicOP("2140", msg);
+            throw new InvalidSymboicOperation(msg);
         }
 
         return newSymbol;
     }
 
     public String symbolicAdd(String symbol, long value) {
-        assert (isSymbolicValue(symbol));
         return symbolicBinaryOP(symbol, '+', value);
     }
 
     public String symbolicSub(String symbol, long value) {
-        assert (isSymbolicValue(symbol));
         return symbolicBinaryOP(symbol, '-', value);
     }
 
     public String symbolicMul(String symbol, long value) {
-        assert (isSymbolicValue(symbol));
         return symbolicBinaryOP(symbol, '*', value);
     }
 
     public String symbolicDiv(String symbol, long value) {
-        assert (isSymbolicValue(symbol));
         return symbolicBinaryOP(symbol, '/', value);
     }
 
@@ -263,7 +250,7 @@ public class SymbolicCalculator {
                 partS = elems[0];
                 partV = 0;
             } else {
-                throw new InvalidSymboicValue("1933", symbol);
+                throw new InvalidSymboicValue(symbol);
             }
 
         } else if (elems.length == 2) {
@@ -272,8 +259,7 @@ public class SymbolicCalculator {
 
         } else {
             /* We assume the symbolic value has at most two parts */
-            String msg = String.format("%s has more than two parts", symbol);
-            throw new InvalidSymboicOP("1970", msg);
+            throw new InvalidSymboicValue(symbol);
         }
 
         String newSymbol;
@@ -310,7 +296,7 @@ public class SymbolicCalculator {
 
             } else {
                 String msg = String.format("(%s) %s %d", symbol, Character.toString(op), value);
-                throw new InvalidSymboicOP("2024", msg);
+                throw new InvalidSymboicOperation(msg);
             }
         }
 
@@ -326,8 +312,9 @@ public class SymbolicCalculator {
      * @return
      */
     private String binaryOP(String pure_symbol0, char op, String pure_symbol1) {
-        assert (isPureSymbolic(pure_symbol0));
-        assert (isPureSymbolic(pure_symbol1));
+        if (!isPureSymbolic(pure_symbol0) || !isPureSymbolic(pure_symbol1)) {
+            throw new InvalidSymboicValue(pure_symbol0 + " or " + pure_symbol1);
+        }
 
         String newSymbol;
         long newValue;
@@ -376,7 +363,7 @@ public class SymbolicCalculator {
                 newSymbol = "0";
             } else if (pure_symbol1.equals("")) {
                 String msg = String.format("(%s) %s (%s)", pure_symbol0, Character.toString(op), pure_symbol1);
-                throw new InvalidSymboicOP("2140", msg);
+                throw new InvalidSymboicOperation(msg);
             } else {
                 newSymbol = String.format("D(%s/%s)", pure_symbol0, pure_symbol1);
             }
@@ -390,7 +377,7 @@ public class SymbolicCalculator {
 
         } else {
             String msg = String.format("(%s) %s (%s)", pure_symbol0, Character.toString(op), pure_symbol0);
-            throw new InvalidSymboicOP("2140", msg);
+            throw new InvalidSymboicOperation(msg);
         }
 
         return newSymbol;
@@ -406,7 +393,9 @@ public class SymbolicCalculator {
      * @return a symbolic value
      */
     private String binaryOP(String pure_symbol, char op, long value) {
-        assert (isPureSymbolic(pure_symbol));
+        if (!isPureSymbolic(pure_symbol)) {
+            throw new InvalidSymboicValue(pure_symbol);
+        }
 
         String newSymbol;
         long newValue;
@@ -425,7 +414,7 @@ public class SymbolicCalculator {
                 newValue = 0;
             } else {
                 String msg = String.format("(%s) %s %d", pure_symbol, Character.toString(op), value);
-                throw new InvalidSymboicOP("1560", msg);
+                throw new InvalidSymboicOperation(msg);
             }
             newSymbol = String.format("%d", newValue);
 
@@ -438,7 +427,7 @@ public class SymbolicCalculator {
                 newSymbol = "0";
             } else {
                 String msg = String.format("(%s) %s %d", pure_symbol, Character.toString(op), value);
-                throw new InvalidSymboicOP("2140", msg);
+                throw new InvalidSymboicOperation(msg);
             }
 
         } else {
@@ -469,7 +458,7 @@ public class SymbolicCalculator {
                 newSymbol = String.format("D(%s^%s)", pure_symbol, newValue);
             } else {
                 String msg = String.format("(%s) %s %d", pure_symbol, Character.toString(op), value);
-                throw new InvalidSymboicValue("2178", msg);
+                throw new InvalidSymboicValue(msg);
             }
         }
 
@@ -499,7 +488,7 @@ public class SymbolicCalculator {
         } else if (op == '^') {
             res = value0 ^ value1;
         } else {
-            throw new InvalidSymboicOP("2207", Character.toString(op));
+            throw new InvalidSymboicOperation(Character.toString(op));
         }
         return res;
     }

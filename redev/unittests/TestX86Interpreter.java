@@ -220,8 +220,8 @@ class TestClass {
         inpt.doRecording(state, smart, inst);
 
         /* mov rax, [rax] */
-        oprd_mem = new Object[] { rax };
-        inst = new InstructionDB(0x400564L, "mov", "RAX", oprd_rax, "[RAX]", oprd_mem);
+        oprd_mem = new Object[] { rax, s1 };
+        inst = new InstructionDB(0x400564L, "mov", "RAX", oprd_rax, "[RAX + 0x0]", oprd_mem);
         inpt.doRecording(state, smart, inst);
         assert(state.getRegValue(rax.getName()).equals("VVRBX"));
 

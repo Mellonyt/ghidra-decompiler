@@ -53,9 +53,6 @@ class VSAUpdateParameter {
     Map<String, DataType> m_mapScopeDT; // map a scope name to a datatype;
 
     public VSAUpdateParameter(Program program) {
-        if (program == null) {
-            throw new IllegalArgumentException("NUll pointer");
-        }
         m_program = program;
     }
 
@@ -86,7 +83,7 @@ class VSAUpdateParameter {
                 struct_name += "Q";
                 break;
             default:
-                String msg = String.format("Failed to parse data layout %d", delta);
+                String msg = String.format("Failed to parse data layout %d @ %s", delta, struct_layout.toString());
                 System.out.println(msg);
                 return null;
             }
@@ -150,9 +147,7 @@ class VSAUpdateParameter {
      * @param name
      * @return return null if failed
      */
-    private Variable _genRegParameter(String this_scope, String reg_name, DataType dt, String param_name) {
-        assert (m_setAllScopes.contains(this_scope));
-
+    private Variable _genRegParameter(String reg_name, DataType dt, String param_name) {
         /* Create a variable if possible */
         Variable parameter = null;
 
@@ -179,7 +174,7 @@ class VSAUpdateParameter {
 
         /* IntegerDataType.dataType is the default data type */
         if (dt != null) {
-            return _genRegParameter(this_scope, reg_name, dt, param_name);
+            return _genRegParameter(reg_name, dt, param_name);
         } else {
             return null;
         }
@@ -193,7 +188,7 @@ class VSAUpdateParameter {
 
         /* FloatDataType.dataType is the default data type */
         if (dt != null) {
-            return _genRegParameter(this_scope, reg_name, dt, param_name);
+            return _genRegParameter(reg_name, dt, param_name);
         } else {
             return null;
         }
@@ -220,7 +215,8 @@ class VSAUpdateParameter {
             }
 
             /* for float-point registers */
-            String[] regFNames = new String[] { "XMM0", "XMM1", "XMM2", "XMM3", "XMM4", "XMM5", "XMM6", "XMM7" };
+            String[] regFNames = new String[] { "XMM0", "XMM1", "XMM2", "XMM3", "XMM4", "XMM5", "XMM6", "XMM7", "XMM8",
+                    "XMM9", "XMM10", "XMM11", "XMM12", "XMM13", "XMM14", "XMM15" };
             for (int i = 0; i < regFNames.length; i++) {
                 Variable p = genFPRParameter(regFNames[i], ordinal);
                 if (p != null) {
@@ -376,8 +372,8 @@ public class SymbolicVSA extends GhidraScript {
                 continue;
 
             // Entry-point
-            // if (f.getEntryPoint().getOffset() != 0x404052)
-            // continue;
+            // if (f.getEntryPoint().getOffset() != 0x405d20)
+            //     continue;
 
             // println("Function Entry: " + f.getEntryPoint());
             println("Function Name: " + f.getName());
@@ -501,9 +497,9 @@ class FunctionSMAR {
         /* Obtain the wrapper object for GHIDRA's basic block */
         Address fentry = m_function.getEntryPoint();
         ExecutionBlock firstBlk = m_blocks.get(fentry);
-        System.out.println(m_blocks.toString());
-        System.out.println(fentry.toString());
-        assert (firstBlk != null);
+        if (firstBlk == null) {
+            throw new NullPointerException("Cannot get the first block");
+        }
 
         /* Initialize the Machine state */
         X86Interpreter inpt = X86Interpreter.getInterpreter();
@@ -741,7 +737,9 @@ class ExecutionBlock {
         }
 
         /* All MachineState have been consumed */
-        assert (m_MachState.size() == 0);
+        if (m_MachState.size() != 0) {
+            throw new NullPointerException("Invalid machine state");
+        }
 
         if (selfloopMachState != null) {
             m_MachState = selfloopMachState;
@@ -1081,17 +1079,33 @@ class VSAException extends RuntimeException {
 }
 
 /*----------------------------copy from X86Processor.java-------------------------------------------------------------------*/
+
+class InvalidRegister extends VSAException {
+    private String m_reg;
+
+    public InvalidRegister(String register) {
+        m_reg = register;
+    }
+
+    public String toString() {
+        return String.format("Cannot find register -> %s", m_reg);
+    }
+}
+
 class X86Processor {
 
     private static final String[] m_Regs64 = { "RAX", "RBX", "RCX", "RDX", "RDI", "RSI", "RBP", "RSP", "R8", "R9",
             "R10", "R11", "R12", "R13", "R14", "R15" };
     private static final String[] m_Regs32 = { "EAX", "EBX", "ECX", "EDX", "EDI", "ESI", "EBP", "ESP", "R8D", "R9D",
             "R10D", "R11D", "R12D", "R13D", "R14D", "R15D" };
-    private static final String[] m_Regs16 = { "AX", "BX", "CX", "DX", "DI", "SI", "BP", "SP" };
+    private static final String[] m_Regs16 = { "AX", "BX", "CX", "DX", "DI", "SI", "BP", "SP", "R8W", "R9W", "R10W",
+            "R11W", "R12W", "R13W", "R14W", "R15W" };
     private static final String[] m_Regs8h = { "AH", "BH", "CH", "DH" };
-    private static final String[] m_Regs8l = { "AL", "BL", "CL", "DL" };
+    private static final String[] m_Regs8l = { "AL", "BL", "CL", "DL", "DIL", "SIL", "BPL", "SPL", "R8B", "R9B", "R10B",
+            "R11B", "R12B", "R13B", "R14B", "R15B" };
     private static final String[] m_RegSeg = { "FS", "GS" };
-    private static final String[] m_RegXmm = { "XMM0", "XMM1", "XMM2", "XMM3", "XMM4", "XMM5", "XMM6", "XMM7" };
+    private static final String[] m_RegXmm = { "XMM0", "XMM1", "XMM2", "XMM3", "XMM4", "XMM5", "XMM6", "XMM7", "XMM8",
+            "XMM9", "XMM10", "XMM11", "XMM12", "XMM13", "XMM14", "XMM15" };
 
     private static Map<String, String> m_RegMap;
     private static String[] m_AllRegs;
@@ -1160,7 +1174,12 @@ class X86Processor {
 
     /* get the name of whole width register */
     public String getRegisterFullName(String register) {
-        return m_RegMap.get(register);
+        String Reg = m_RegMap.get(register);
+
+        if (Reg == null) {
+            throw new InvalidRegister(register);
+        }
+        return Reg;
     }
 
     /* Get all available registers on this architecture */
@@ -1171,33 +1190,28 @@ class X86Processor {
 
 /*----------------------------copy from X86Interpreter.java-------------------------------------------------------------------*/
 class UnspportInstruction extends VSAException {
-    private String m_lineno;
     private Instruction m_inst;
 
-    UnspportInstruction(String lineno, Instruction instr) {
-        m_lineno = lineno;
+    UnspportInstruction(Instruction instr) {
         m_inst = instr;
     }
 
     public String toString() {
-        String msg = String.format("%s: unsupported instruction -> %s", m_lineno, m_inst.toString());
+        String msg = String.format("Unsupported instruction -> %s", m_inst.toString());
         return msg;
     }
 }
 
 class InvalidOperand extends VSAException {
-    private String m_lineno;
     private Instruction m_inst;
     private Object[] m_objs;
 
-    InvalidOperand(String lineno, Instruction instr, int operand_index) {
-        m_lineno = lineno;
+    InvalidOperand(Instruction instr, int operand_index) {
         m_inst = instr;
         m_objs = instr.getOpObjects(operand_index);
     }
 
-    InvalidOperand(String lineno, Object[] objs_of_MemOperand) {
-        m_lineno = lineno;
+    InvalidOperand(Object[] objs_of_MemOperand) {
         m_inst = null;
         m_objs = objs_of_MemOperand;
     }
@@ -1260,6 +1274,14 @@ class X86Interpreter extends Interpreter {
         return m_CPU;
     }
 
+    /**
+     * Recording memroy accessing into @param table
+     * We deal with exceptions including UnsupportedInstruction and InvalidOperand in this boundary
+     * @param state
+     * @param table
+     * @param inst
+     * @return
+     */
     public boolean doRecording(MachineState state, Map<Long, Map<String, Set<String>>> table, Instruction inst) {
         m_MachState = state;
         m_SMART = table;
@@ -1275,15 +1297,13 @@ class X86Interpreter extends Interpreter {
                 _doRecording2(inst);
             } else if (nOprand == 3) {
                 _doRecording3(inst);
-            } else if (nOprand == 4) {
-                throw new UnspportInstruction("171", inst);
             } else {
                 /* Throw exception */
-                throw new UnspportInstruction("177", inst);
+                throw new UnspportInstruction(inst);
             }
             return true;
 
-        } catch (Exception e) {
+        } catch (UnspportInstruction e) {
             String fname = e.getStackTrace()[0].getFileName();
             int line = e.getStackTrace()[0].getLineNumber();
 
@@ -1322,13 +1342,13 @@ class X86Interpreter extends Interpreter {
         }
 
         else {
-            throw new UnspportInstruction("333: 0 oprands", inst);
+            throw new UnspportInstruction(inst);
         }
     }
 
     private void _record0ret(Instruction inst) {
-        /* pop rip */
         String strValue;
+
         /* Update RSP register status */
         strValue = getRegisterValue("RSP");
         strValue = m_SymCalc.symbolicAdd(strValue, 8);
@@ -1384,16 +1404,20 @@ class X86Interpreter extends Interpreter {
             /* call xxx */
             _record1call(inst);
 
-        } else if (op.charAt(0) == 'j' || op.charAt(0) == 'J') {
+        } 
+        
+        else if (op.charAt(0) == 'j' || op.charAt(0) == 'J') {
             /* jump xxx & jcc xx */
             System.out.println("405: fix-me, jxx");
-        } else if (op.equalsIgnoreCase("ret")) {
+        } 
+        
+        else if (op.equalsIgnoreCase("ret")) {
             /* retn 0x8 */
             _record1retn(inst);
         }
 
         else {
-            throw new UnspportInstruction("582: 1 oprands", inst);
+            throw new UnspportInstruction(inst);
         }
     }
 
@@ -1448,7 +1472,9 @@ class X86Interpreter extends Interpreter {
          * operand must be a reigster. Other type of memory access does't supported by
          * x86 and ARM
          */
-        assert (m_OPRDTYPE.isRegister(oprdty));
+        if (!m_OPRDTYPE.isRegister(oprdty)) {
+            throw new InvalidOperand(inst, 0);
+        }
         Register r = (Register) objs[0];
         // strAddr = getRegisterValue("RSP");
         // updateMemoryReadAccess(inst.getAddress(), strAddr);
@@ -1638,7 +1664,7 @@ class X86Interpreter extends Interpreter {
         }
 
         else {
-            throw new UnspportInstruction("689: 2 oprands", inst);
+            throw new UnspportInstruction(inst);
         }
     }
 
@@ -1717,7 +1743,7 @@ class X86Interpreter extends Interpreter {
                 strVal1 = String.valueOf(sOprd1.getValue());
             } else {
                 /* Operand 1 is invalid, throw exeception */
-                throw new InvalidOperand("773", inst, 1);
+                throw new InvalidOperand(inst, 1);
             }
 
             if (op == '+')
@@ -1785,7 +1811,7 @@ class X86Interpreter extends Interpreter {
 
             } else {
                 /* Operand 1 is invalid, throw exeception */
-                throw new InvalidOperand("858", inst, 1);
+                throw new InvalidOperand(inst, 1);
             }
 
             /* update memory write access */
@@ -1800,7 +1826,9 @@ class X86Interpreter extends Interpreter {
         Object[] objs1 = inst.getOpObjects(1);
 
         /* get the name of register */
-        assert (m_OPRDTYPE.isRegister(oprd0ty));
+        if (!m_OPRDTYPE.isRegister(oprd0ty)) {
+            throw new InvalidOperand(inst, 0);
+        }
         Register rOprd0 = (Register) objs0[0];
 
         /* get the value of second operand */
@@ -1863,7 +1891,7 @@ class X86Interpreter extends Interpreter {
 
             } else {
                 /* Operand 1 is invalid, throw exeception */
-                throw new InvalidOperand("949", inst, 1);
+                throw new InvalidOperand(inst, 1);
             }
 
             /* update memory write access */
@@ -1887,7 +1915,8 @@ class X86Interpreter extends Interpreter {
         if (m_OPRDTYPE.isRegister(oprd0ty)) {
             /* do nothing */
         } else if (m_OPRDTYPE.isScalar(oprd0ty)) {
-            throw new InvalidOperand("987", inst, 0);
+            throw new InvalidOperand(inst, 0);
+
         } else {
             /* memory oprand */
             String strAddr0 = _calcMemAddress(inst.getDefaultOperandRepresentation(0), objs0);
@@ -1964,7 +1993,7 @@ class X86Interpreter extends Interpreter {
             Register r = (Register) objs1[0];
             strVal1 = getRegisterValue(r);
         } else {
-            throw new InvalidOperand("1961", inst, 1);
+            throw new InvalidOperand(inst, 1);
         }
 
         /* check oprand 0 */
@@ -1985,7 +2014,7 @@ class X86Interpreter extends Interpreter {
                     strRes = m_SymCalc.symbolicDiv(strVal0, strVal1 + "2P");
                 }
             } else {
-                throw new InvalidOperand("1938", inst, 1);
+                throw new InvalidOperand(inst, 1);
             }
 
             /* upate register status */
@@ -2009,7 +2038,7 @@ class X86Interpreter extends Interpreter {
                     strRes = m_SymCalc.symbolicDiv(strVal0, strVal1 + "2P");
                 }
             } else {
-                throw new InvalidOperand("1961", inst, 1);
+                throw new InvalidOperand(inst, 1);
             }
             /* Update memory write access */
             updateMemoryWriteAccess(inst.getAddress(), strAddr0, strRes);
@@ -2056,7 +2085,7 @@ class X86Interpreter extends Interpreter {
 
         } else {
             /* Operand 1 is invalid, throw exeception */
-            throw new InvalidOperand("949", inst, 2);
+            throw new InvalidOperand(inst, 2);
         }
     }
 
@@ -2069,7 +2098,7 @@ class X86Interpreter extends Interpreter {
             /* sub reg, reg; sub reg, 0x1234; sub reg, mem; sub mem, reg; sub mem, 0x1234 */
             _record3imul(inst);
         } else {
-            throw new UnspportInstruction("1044: 3 oprands", inst);
+            throw new UnspportInstruction(inst);
         }
     }
 
@@ -2084,7 +2113,10 @@ class X86Interpreter extends Interpreter {
         String strVal1, strRes;
 
         /* test oprand 0 */
-        assert (m_OPRDTYPE.isRegister(oprd0ty) && m_OPRDTYPE.isScalar(oprd2ty));
+        if (!(m_OPRDTYPE.isRegister(oprd0ty) && m_OPRDTYPE.isScalar(oprd2ty))) {
+            throw new InvalidOperand(inst, 0);
+        }
+
         Register rOprd0 = (Register) objs0[0];
 
         if (m_OPRDTYPE.isRegister(oprd1ty)) {
@@ -2092,7 +2124,8 @@ class X86Interpreter extends Interpreter {
             strVal1 = getRegisterValue(r);
 
         } else if (m_OPRDTYPE.isScalar(oprd1ty)) {
-            throw new InvalidOperand("1069", inst, 1);
+            throw new InvalidOperand(inst, 1);
+
         } else {
             /* memory oprand */
             String strAddr1 = _calcMemAddress(inst.getDefaultOperandRepresentation(1), objs1);
@@ -2146,7 +2179,7 @@ class X86Interpreter extends Interpreter {
 
             } else {
                 /* This operand is invalid, throw exeception */
-                throw new InvalidOperand("992", objs_of_MemOperand);
+                throw new InvalidOperand(objs_of_MemOperand);
             }
         } else if (objs.length == 2) {
             /*
@@ -2171,7 +2204,7 @@ class X86Interpreter extends Interpreter {
                     r = (Register) objs[1];
                     s = (Scalar) objs[0];
                 } else {
-                    throw new InvalidOperand("1019", objs_of_MemOperand);
+                    throw new InvalidOperand(objs_of_MemOperand);
                 }
                 strValue = getRegisterValue(r.getName());
                 strAddress = m_SymCalc.symbolicAdd(strValue, s.getValue());
@@ -2189,7 +2222,6 @@ class X86Interpreter extends Interpreter {
                 ri = (Register) objs[1];
                 s = (Scalar) objs[2];
 
-                System.out.println(String.format("%s + %s*%d?", rb.getName(), ri.getName(), s.getValue()));
                 vb = getRegisterValue(rb.getName());
                 vi = getRegisterValue(ri.getName());
 
@@ -2198,7 +2230,7 @@ class X86Interpreter extends Interpreter {
 
                 return strAddress;
             } else {
-                throw new InvalidOperand("1319", objs_of_MemOperand);
+                throw new InvalidOperand(objs_of_MemOperand);
             }
         } else if (objs.length == 4) {
             /* [RBP + RAX*0x4 + -0x60] */
@@ -2223,7 +2255,7 @@ class X86Interpreter extends Interpreter {
                 so = (Scalar) objs[0];
 
             } else {
-                throw new InvalidOperand("1574", objs_of_MemOperand);
+                throw new InvalidOperand(objs_of_MemOperand);
             }
 
             vb = getRegisterValue(rb.getName());
@@ -2237,7 +2269,7 @@ class X86Interpreter extends Interpreter {
 
         } else {
             /* This operand is invalid, throw exeception */
-            throw new InvalidOperand("1579", objs_of_MemOperand);
+            throw new InvalidOperand(objs_of_MemOperand);
         }
     }
 
@@ -2274,12 +2306,11 @@ class X86Interpreter extends Interpreter {
             tmpMap.put(reg, tmpSet);
         }
 
-        assert (tmpSet != null);
+        // assert (tmpSet != null);
         tmpSet.add(value);
 
         /* for debugging */
-        // System.out.println(String.format("674: @0x%x: %s = %s", inst_address, reg,
-        // value));
+        // System.out.println(String.format("674: @0x%x: %s = %s", inst_address, reg, value));
 
         /* Update register state */
         m_MachState.setRegValue(reg, value);
@@ -2312,12 +2343,11 @@ class X86Interpreter extends Interpreter {
             tmpMap.put(address, tmpSet);
         }
 
-        assert (tmpSet != null);
+        // assert (tmpSet != null);
         tmpSet.add(value);
 
         /* for debuging */
-        // System.out.println(String.format("686: @0x%x: [%s] = %s", inst_address,
-        // address, value));
+        // System.out.println(String.format("686: @0x%x: [%s] = %s", inst_address, address, value));
 
         /* Update memory status */
         m_MachState.setMemValue(address, value);
@@ -2361,30 +2391,26 @@ class X86Interpreter extends Interpreter {
 
 /*----------------------------copy from SymbolicCalculator.java-------------------------------------------------------------------*/
 class InvalidSymboicValue extends VSAException {
-    private static final long serialVersionUID = 1L;
-    private String m_lineno, m_symbol;
+    private String m_symbol;
 
-    public InvalidSymboicValue(String lineno, String symbol) {
-        m_lineno = lineno;
+    public InvalidSymboicValue(String symbol) {
         m_symbol = symbol;
     }
 
     public String toString() {
-        return String.format("%s: InvalidSymboicValue -> %s", m_lineno, m_symbol);
+        return String.format("InvalidSymboicValue -> %s", m_symbol);
     }
 }
 
-class InvalidSymboicOP extends VSAException {
-    private static final long serialVersionUID = 1L;
-    private String m_lineno, m_msg;
+class InvalidSymboicOperation extends VSAException {
+    private String m_msg;
 
-    public InvalidSymboicOP(String lineno, String message) {
-        m_lineno = lineno;
-        m_msg = message;
+    public InvalidSymboicOperation(String expression) {
+        m_msg = expression;
     }
 
     public String toString() {
-        return String.format("%s: InvalidSymboicOP -> %s", m_lineno, m_msg);
+        return String.format("InvalidSymboicOperation -> %s", m_msg);
     }
 }
 
@@ -2409,27 +2435,22 @@ class SymbolicCalculator {
     }
 
     public String symbolicAdd(String symbol0, String symbol1) {
-        assert (isSymbolicValue(symbol0) && isSymbolicValue(symbol1));
         return symbolicBinaryOP(symbol0, '+', symbol1);
     }
 
     public String symbolicSub(String symbol0, String symbol1) {
-        assert (isSymbolicValue(symbol0) && isSymbolicValue(symbol1));
         return symbolicBinaryOP(symbol0, '-', symbol1);
     }
 
     public String symbolicMul(String symbol0, String symbol1) {
-        assert (isSymbolicValue(symbol0) && isSymbolicValue(symbol1));
         return symbolicBinaryOP(symbol0, '*', symbol1);
     }
 
     public String symbolicDiv(String symbol0, String symbol1) {
-        assert (isSymbolicValue(symbol0) && isSymbolicValue(symbol1));
         return symbolicBinaryOP(symbol0, '/', symbol1);
     }
 
     public String symbolicXor(String symbol0, String symbol1) {
-        assert (isSymbolicValue(symbol0) && isSymbolicValue(symbol1));
         return symbolicBinaryOP(symbol0, '^', symbol1);
     }
 
@@ -2457,14 +2478,14 @@ class SymbolicCalculator {
                 part0S = elems0[0];
                 part0V = 0;
             } else {
-                throw new InvalidSymboicValue("1833", symbol0);
+                throw new InvalidSymboicValue(symbol0);
             }
         } else if (elems0.length == 2) {
             part0S = elems0[0];
             part0V = Long.decode(elems0[1]);
         } else {
             /* We assume each value has at most two parts. */
-            throw new InvalidSymboicValue("1841", symbol0);
+            throw new InvalidSymboicValue(symbol0);
         }
 
         /* parse the symbolic value symbol1 */
@@ -2479,14 +2500,14 @@ class SymbolicCalculator {
                 part1S = elems1[0];
                 part1V = 0;
             } else {
-                throw new InvalidSymboicValue("1859", symbol1);
+                throw new InvalidSymboicValue(symbol1);
             }
         } else if (elems1.length == 2) {
             part1S = elems1[0];
             part1V = Long.decode(elems1[1]);
         } else {
             /* We assume each value has at most two parts. */
-            throw new InvalidSymboicValue("1867", symbol1);
+            throw new InvalidSymboicValue(symbol1);
         }
 
         /* calculate the result */
@@ -2568,29 +2589,25 @@ class SymbolicCalculator {
         } else {
             /* Thow exception */
             String msg = String.format("(%s) %s (%s)", symbol0, Character.toString(op), symbol1);
-            throw new InvalidSymboicOP("2140", msg);
+            throw new InvalidSymboicOperation(msg);
         }
 
         return newSymbol;
     }
 
     public String symbolicAdd(String symbol, long value) {
-        assert (isSymbolicValue(symbol));
         return symbolicBinaryOP(symbol, '+', value);
     }
 
     public String symbolicSub(String symbol, long value) {
-        assert (isSymbolicValue(symbol));
         return symbolicBinaryOP(symbol, '-', value);
     }
 
     public String symbolicMul(String symbol, long value) {
-        assert (isSymbolicValue(symbol));
         return symbolicBinaryOP(symbol, '*', value);
     }
 
     public String symbolicDiv(String symbol, long value) {
-        assert (isSymbolicValue(symbol));
         return symbolicBinaryOP(symbol, '/', value);
     }
 
@@ -2617,7 +2634,7 @@ class SymbolicCalculator {
                 partS = elems[0];
                 partV = 0;
             } else {
-                throw new InvalidSymboicValue("1933", symbol);
+                throw new InvalidSymboicValue(symbol);
             }
 
         } else if (elems.length == 2) {
@@ -2626,8 +2643,7 @@ class SymbolicCalculator {
 
         } else {
             /* We assume the symbolic value has at most two parts */
-            String msg = String.format("%s has more than two parts", symbol);
-            throw new InvalidSymboicOP("1970", msg);
+            throw new InvalidSymboicValue(symbol);
         }
 
         String newSymbol;
@@ -2664,7 +2680,7 @@ class SymbolicCalculator {
 
             } else {
                 String msg = String.format("(%s) %s %d", symbol, Character.toString(op), value);
-                throw new InvalidSymboicOP("2024", msg);
+                throw new InvalidSymboicOperation(msg);
             }
         }
 
@@ -2680,8 +2696,9 @@ class SymbolicCalculator {
      * @return
      */
     private String binaryOP(String pure_symbol0, char op, String pure_symbol1) {
-        assert (isPureSymbolic(pure_symbol0));
-        assert (isPureSymbolic(pure_symbol1));
+        if (!isPureSymbolic(pure_symbol0) || !isPureSymbolic(pure_symbol1)) {
+            throw new InvalidSymboicValue(pure_symbol0 + " or " + pure_symbol1);
+        }
 
         String newSymbol;
         long newValue;
@@ -2730,7 +2747,7 @@ class SymbolicCalculator {
                 newSymbol = "0";
             } else if (pure_symbol1.equals("")) {
                 String msg = String.format("(%s) %s (%s)", pure_symbol0, Character.toString(op), pure_symbol1);
-                throw new InvalidSymboicOP("2140", msg);
+                throw new InvalidSymboicOperation(msg);
             } else {
                 newSymbol = String.format("D(%s/%s)", pure_symbol0, pure_symbol1);
             }
@@ -2744,7 +2761,7 @@ class SymbolicCalculator {
 
         } else {
             String msg = String.format("(%s) %s (%s)", pure_symbol0, Character.toString(op), pure_symbol0);
-            throw new InvalidSymboicOP("2140", msg);
+            throw new InvalidSymboicOperation(msg);
         }
 
         return newSymbol;
@@ -2760,7 +2777,9 @@ class SymbolicCalculator {
      * @return a symbolic value
      */
     private String binaryOP(String pure_symbol, char op, long value) {
-        assert (isPureSymbolic(pure_symbol));
+        if (!isPureSymbolic(pure_symbol)) {
+            throw new InvalidSymboicValue(pure_symbol);
+        }
 
         String newSymbol;
         long newValue;
@@ -2779,7 +2798,7 @@ class SymbolicCalculator {
                 newValue = 0;
             } else {
                 String msg = String.format("(%s) %s %d", pure_symbol, Character.toString(op), value);
-                throw new InvalidSymboicOP("1560", msg);
+                throw new InvalidSymboicOperation(msg);
             }
             newSymbol = String.format("%d", newValue);
 
@@ -2792,7 +2811,7 @@ class SymbolicCalculator {
                 newSymbol = "0";
             } else {
                 String msg = String.format("(%s) %s %d", pure_symbol, Character.toString(op), value);
-                throw new InvalidSymboicOP("2140", msg);
+                throw new InvalidSymboicOperation(msg);
             }
 
         } else {
@@ -2823,7 +2842,7 @@ class SymbolicCalculator {
                 newSymbol = String.format("D(%s^%s)", pure_symbol, newValue);
             } else {
                 String msg = String.format("(%s) %s %d", pure_symbol, Character.toString(op), value);
-                throw new InvalidSymboicValue("2178", msg);
+                throw new InvalidSymboicValue(msg);
             }
         }
 
@@ -2853,7 +2872,7 @@ class SymbolicCalculator {
         } else if (op == '^') {
             res = value0 ^ value1;
         } else {
-            throw new InvalidSymboicOP("2207", Character.toString(op));
+            throw new InvalidSymboicOperation(Character.toString(op));
         }
         return res;
     }
@@ -3025,25 +3044,31 @@ class StructInfer {
     /**
      * Find out all scopes: each pure symbolic value representing a new scope
      * 
-     * @param mapSMAT
+     * @param memory_access_table
      * @return
      */
-    public Map<String, List<Long>> findMemoryScopesWOArray(
-            Map<Long, Map<String, Set<String>>> symbolic_memory_access_table) {
+    public Map<String, List<Long>> findMemoryScopesWOArray(Map<Long, Map<String, Set<String>>> memory_access_table) {
         Map<String, List<Long>> mapScopeAccess = new HashMap<>();
         List<Long> addrSet;
         String scope;
 
-        for (Map.Entry<Long, Map<String, Set<String>>> entMapSMAT : symbolic_memory_access_table.entrySet()) {
+        for (Map.Entry<Long, Map<String, Set<String>>> entMapSMAT : memory_access_table.entrySet()) {
             Map<String, Set<String>> mapVS = entMapSMAT.getValue();
 
-            if (mapVS.size() > 2) // ignore array access, at most one register and one memory operand
+            /*
+             * WIDENVS_THRESHOLD = 6; tigger widening; // ignore array access, at most one
+             * register and one memory operand
+             */
+            if (mapVS.size() >= 4)
                 continue;
 
-            /* all memory addresses accessed by instructions */
+            /* memory accessed by this function */
             for (Map.Entry<String, Set<String>> entMapVS : mapVS.entrySet()) {
                 String addr = entMapVS.getKey();
-                assert (addr.length() > 0);
+                if (addr == null || addr.length() <= 0) {
+                    throw new NullPointerException(mapVS.toString());
+                }
+
                 if (addr.charAt(0) != 'V')
                     continue;
 

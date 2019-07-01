@@ -6,33 +6,28 @@ import symbolicVSA.*;
 import symbolicVSA.operand.*;
 
 class UnspportInstruction extends VSAException {
-    private String m_lineno;
     private Instruction m_inst;
 
-    UnspportInstruction(String lineno, Instruction instr) {
-        m_lineno = lineno;
+    UnspportInstruction(Instruction instr) {
         m_inst = instr;
     }
 
     public String toString() {
-        String msg = String.format("%s: unsupported instruction -> %s", m_lineno, m_inst.toString());
+        String msg = String.format("Unsupported instruction -> %s", m_inst.toString());
         return msg;
     }
 }
 
 class InvalidOperand extends VSAException {
-    private String m_lineno;
     private Instruction m_inst;
     private Object[] m_objs;
 
-    InvalidOperand(String lineno, Instruction instr, int operand_index) {
-        m_lineno = lineno;
+    InvalidOperand(Instruction instr, int operand_index) {
         m_inst = instr;
         m_objs = instr.getOpObjects(operand_index);
     }
 
-    InvalidOperand(String lineno, Object[] objs_of_MemOperand) {
-        m_lineno = lineno;
+    InvalidOperand(Object[] objs_of_MemOperand) {
         m_inst = null;
         m_objs = objs_of_MemOperand;
     }
@@ -95,6 +90,14 @@ public class X86Interpreter extends Interpreter {
         return m_CPU;
     }
 
+    /**
+     * Recording memroy accessing into @param table
+     * We deal with exceptions including UnsupportedInstruction and InvalidOperand in this boundary
+     * @param state
+     * @param table
+     * @param inst
+     * @return
+     */
     public boolean doRecording(MachineState state, Map<Long, Map<String, Set<String>>> table, Instruction inst) {
         m_MachState = state;
         m_SMART = table;
@@ -110,15 +113,13 @@ public class X86Interpreter extends Interpreter {
                 _doRecording2(inst);
             } else if (nOprand == 3) {
                 _doRecording3(inst);
-            } else if (nOprand == 4) {
-                throw new UnspportInstruction("171", inst);
             } else {
                 /* Throw exception */
-                throw new UnspportInstruction("177", inst);
+                throw new UnspportInstruction(inst);
             }
             return true;
 
-        } catch (Exception e) {
+        } catch (UnspportInstruction e) {
             String fname = e.getStackTrace()[0].getFileName();
             int line = e.getStackTrace()[0].getLineNumber();
 
@@ -157,13 +158,13 @@ public class X86Interpreter extends Interpreter {
         }
 
         else {
-            throw new UnspportInstruction("333: 0 oprands", inst);
+            throw new UnspportInstruction(inst);
         }
     }
 
     private void _record0ret(Instruction inst) {
-        /* pop rip */
         String strValue;
+
         /* Update RSP register status */
         strValue = getRegisterValue("RSP");
         strValue = m_SymCalc.symbolicAdd(strValue, 8);
@@ -219,16 +220,20 @@ public class X86Interpreter extends Interpreter {
             /* call xxx */
             _record1call(inst);
 
-        } else if (op.charAt(0) == 'j' || op.charAt(0) == 'J') {
+        } 
+        
+        else if (op.charAt(0) == 'j' || op.charAt(0) == 'J') {
             /* jump xxx & jcc xx */
             System.out.println("405: fix-me, jxx");
-        } else if (op.equalsIgnoreCase("ret")) {
+        } 
+        
+        else if (op.equalsIgnoreCase("ret")) {
             /* retn 0x8 */
             _record1retn(inst);
         }
 
         else {
-            throw new UnspportInstruction("582: 1 oprands", inst);
+            throw new UnspportInstruction(inst);
         }
     }
 
@@ -283,7 +288,9 @@ public class X86Interpreter extends Interpreter {
          * operand must be a reigster. Other type of memory access does't supported by
          * x86 and ARM
          */
-        assert (m_OPRDTYPE.isRegister(oprdty));
+        if (!m_OPRDTYPE.isRegister(oprdty)) {
+            throw new InvalidOperand(inst, 0);
+        }
         Register r = (Register) objs[0];
         // strAddr = getRegisterValue("RSP");
         // updateMemoryReadAccess(inst.getAddress(), strAddr);
@@ -473,7 +480,7 @@ public class X86Interpreter extends Interpreter {
         }
 
         else {
-            throw new UnspportInstruction("689: 2 oprands", inst);
+            throw new UnspportInstruction(inst);
         }
     }
 
@@ -552,7 +559,7 @@ public class X86Interpreter extends Interpreter {
                 strVal1 = String.valueOf(sOprd1.getValue());
             } else {
                 /* Operand 1 is invalid, throw exeception */
-                throw new InvalidOperand("773", inst, 1);
+                throw new InvalidOperand(inst, 1);
             }
 
             if (op == '+')
@@ -620,7 +627,7 @@ public class X86Interpreter extends Interpreter {
 
             } else {
                 /* Operand 1 is invalid, throw exeception */
-                throw new InvalidOperand("858", inst, 1);
+                throw new InvalidOperand(inst, 1);
             }
 
             /* update memory write access */
@@ -635,7 +642,9 @@ public class X86Interpreter extends Interpreter {
         Object[] objs1 = inst.getOpObjects(1);
 
         /* get the name of register */
-        assert (m_OPRDTYPE.isRegister(oprd0ty));
+        if (!m_OPRDTYPE.isRegister(oprd0ty)) {
+            throw new InvalidOperand(inst, 0);
+        }
         Register rOprd0 = (Register) objs0[0];
 
         /* get the value of second operand */
@@ -698,7 +707,7 @@ public class X86Interpreter extends Interpreter {
 
             } else {
                 /* Operand 1 is invalid, throw exeception */
-                throw new InvalidOperand("949", inst, 1);
+                throw new InvalidOperand(inst, 1);
             }
 
             /* update memory write access */
@@ -722,7 +731,8 @@ public class X86Interpreter extends Interpreter {
         if (m_OPRDTYPE.isRegister(oprd0ty)) {
             /* do nothing */
         } else if (m_OPRDTYPE.isScalar(oprd0ty)) {
-            throw new InvalidOperand("987", inst, 0);
+            throw new InvalidOperand(inst, 0);
+
         } else {
             /* memory oprand */
             String strAddr0 = _calcMemAddress(inst.getDefaultOperandRepresentation(0), objs0);
@@ -799,7 +809,7 @@ public class X86Interpreter extends Interpreter {
             Register r = (Register) objs1[0];
             strVal1 = getRegisterValue(r);
         } else {
-            throw new InvalidOperand("1961", inst, 1);
+            throw new InvalidOperand(inst, 1);
         }
 
         /* check oprand 0 */
@@ -820,7 +830,7 @@ public class X86Interpreter extends Interpreter {
                     strRes = m_SymCalc.symbolicDiv(strVal0, strVal1 + "2P");
                 }
             } else {
-                throw new InvalidOperand("1938", inst, 1);
+                throw new InvalidOperand(inst, 1);
             }
 
             /* upate register status */
@@ -844,7 +854,7 @@ public class X86Interpreter extends Interpreter {
                     strRes = m_SymCalc.symbolicDiv(strVal0, strVal1 + "2P");
                 }
             } else {
-                throw new InvalidOperand("1961", inst, 1);
+                throw new InvalidOperand(inst, 1);
             }
             /* Update memory write access */
             updateMemoryWriteAccess(inst.getAddress(), strAddr0, strRes);
@@ -891,7 +901,7 @@ public class X86Interpreter extends Interpreter {
 
         } else {
             /* Operand 1 is invalid, throw exeception */
-            throw new InvalidOperand("949", inst, 2);
+            throw new InvalidOperand(inst, 2);
         }
     }
 
@@ -904,7 +914,7 @@ public class X86Interpreter extends Interpreter {
             /* sub reg, reg; sub reg, 0x1234; sub reg, mem; sub mem, reg; sub mem, 0x1234 */
             _record3imul(inst);
         } else {
-            throw new UnspportInstruction("1044: 3 oprands", inst);
+            throw new UnspportInstruction(inst);
         }
     }
 
@@ -919,7 +929,10 @@ public class X86Interpreter extends Interpreter {
         String strVal1, strRes;
 
         /* test oprand 0 */
-        assert (m_OPRDTYPE.isRegister(oprd0ty) && m_OPRDTYPE.isScalar(oprd2ty));
+        if (!(m_OPRDTYPE.isRegister(oprd0ty) && m_OPRDTYPE.isScalar(oprd2ty))) {
+            throw new InvalidOperand(inst, 0);
+        }
+
         Register rOprd0 = (Register) objs0[0];
 
         if (m_OPRDTYPE.isRegister(oprd1ty)) {
@@ -927,7 +940,8 @@ public class X86Interpreter extends Interpreter {
             strVal1 = getRegisterValue(r);
 
         } else if (m_OPRDTYPE.isScalar(oprd1ty)) {
-            throw new InvalidOperand("1069", inst, 1);
+            throw new InvalidOperand(inst, 1);
+
         } else {
             /* memory oprand */
             String strAddr1 = _calcMemAddress(inst.getDefaultOperandRepresentation(1), objs1);
@@ -981,7 +995,7 @@ public class X86Interpreter extends Interpreter {
 
             } else {
                 /* This operand is invalid, throw exeception */
-                throw new InvalidOperand("992", objs_of_MemOperand);
+                throw new InvalidOperand(objs_of_MemOperand);
             }
         } else if (objs.length == 2) {
             /*
@@ -1006,7 +1020,7 @@ public class X86Interpreter extends Interpreter {
                     r = (Register) objs[1];
                     s = (Scalar) objs[0];
                 } else {
-                    throw new InvalidOperand("1019", objs_of_MemOperand);
+                    throw new InvalidOperand(objs_of_MemOperand);
                 }
                 strValue = getRegisterValue(r.getName());
                 strAddress = m_SymCalc.symbolicAdd(strValue, s.getValue());
@@ -1024,7 +1038,6 @@ public class X86Interpreter extends Interpreter {
                 ri = (Register) objs[1];
                 s = (Scalar) objs[2];
 
-                System.out.println(String.format("%s + %s*%d?", rb.getName(), ri.getName(), s.getValue()));
                 vb = getRegisterValue(rb.getName());
                 vi = getRegisterValue(ri.getName());
 
@@ -1033,7 +1046,7 @@ public class X86Interpreter extends Interpreter {
 
                 return strAddress;
             } else {
-                throw new InvalidOperand("1319", objs_of_MemOperand);
+                throw new InvalidOperand(objs_of_MemOperand);
             }
         } else if (objs.length == 4) {
             /* [RBP + RAX*0x4 + -0x60] */
@@ -1058,7 +1071,7 @@ public class X86Interpreter extends Interpreter {
                 so = (Scalar) objs[0];
 
             } else {
-                throw new InvalidOperand("1574", objs_of_MemOperand);
+                throw new InvalidOperand(objs_of_MemOperand);
             }
 
             vb = getRegisterValue(rb.getName());
@@ -1072,7 +1085,7 @@ public class X86Interpreter extends Interpreter {
 
         } else {
             /* This operand is invalid, throw exeception */
-            throw new InvalidOperand("1579", objs_of_MemOperand);
+            throw new InvalidOperand(objs_of_MemOperand);
         }
     }
 
@@ -1109,12 +1122,11 @@ public class X86Interpreter extends Interpreter {
             tmpMap.put(reg, tmpSet);
         }
 
-        assert (tmpSet != null);
+        // assert (tmpSet != null);
         tmpSet.add(value);
 
         /* for debugging */
-        // System.out.println(String.format("674: @0x%x: %s = %s", inst_address, reg,
-        // value));
+        // System.out.println(String.format("674: @0x%x: %s = %s", inst_address, reg, value));
 
         /* Update register state */
         m_MachState.setRegValue(reg, value);
@@ -1147,12 +1159,11 @@ public class X86Interpreter extends Interpreter {
             tmpMap.put(address, tmpSet);
         }
 
-        assert (tmpSet != null);
+        // assert (tmpSet != null);
         tmpSet.add(value);
 
         /* for debuging */
-        // System.out.println(String.format("686: @0x%x: [%s] = %s", inst_address,
-        // address, value));
+        // System.out.println(String.format("686: @0x%x: [%s] = %s", inst_address, address, value));
 
         /* Update memory status */
         m_MachState.setMemValue(address, value);

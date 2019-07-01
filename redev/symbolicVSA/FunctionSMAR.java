@@ -85,9 +85,9 @@ public class FunctionSMAR {
         /* Obtain the wrapper object for GHIDRA's basic block */
         Address fentry = m_function.getEntryPoint();
         ExecutionBlock firstBlk = m_blocks.get(fentry);
-        System.out.println(m_blocks.toString());
-        System.out.println(fentry.toString());
-        assert (firstBlk != null);
+        if (firstBlk == null) {
+            throw new NullPointerException("Cannot get the first block");
+        }
 
         /* Initialize the Machine state */
         X86Interpreter inpt = X86Interpreter.getInterpreter();
@@ -325,7 +325,9 @@ class ExecutionBlock {
         }
 
         /* All MachineState have been consumed */
-        assert (m_MachState.size() == 0);
+        if (m_MachState.size() != 0) {
+            throw new NullPointerException("Invalid machine state");
+        }
 
         if (selfloopMachState != null) {
             m_MachState = selfloopMachState;
