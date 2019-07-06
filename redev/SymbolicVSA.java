@@ -382,6 +382,7 @@ public class SymbolicVSA extends GhidraScript {
             smar.doSMARecording();
 
             Map<Long, Map<String, Set<String>>> smart = smar.getSMARTable();
+            println("SMARTable: " + smart.toString());
 
             Map<String, List<Long>> scopeAccess = infer.findMemoryScopesWOArray(smart);
             // println("358: Find scopes: " + scopeAccess);
